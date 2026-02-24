@@ -1,0 +1,212 @@
+MONTHLY EXPORTS AUTOMATION SETUP
+==================================
+
+This document explains how to set up automated monthly exports for orders and points ledger data.
+
+OVERVIEW
+--------
+The system uses:
+1. Supabase Edge Function (supabase/functions/monthly-export)
+2. pg_cron extension to schedule monthly execution
+3. pg_net extension to make HTTP requests from PostgreSQL
+
+The function generates CSV exports for the previous month on the 1st of each month at 00:10 UTC.
+
+
+PREREQUISITES
+-------------
+1. Supabase project with pg_cron and pg_net extensions enabled
+2. Edge Function deployed to Supabase
+3. Environment variables configured
+
+
+STEP 1: DEPLOY EDGE FUNCTION
+-----------------------------
+
+1. Install Supabase CLI (if not already):
+   npm install -g supabase
+
+2. Login to Supabase:
+   supabase login
+
+3. Link to your project:
+   supabase link --project-ref YOUR_PROJECT_REF
+
+4. Set the CRON_SECRET environment variable:
+   supabase secrets set CRON_SECRET="your-secure-random-string-here"
+   
+   Generate a strong secret:
+   - Windows PowerShell: 
+     [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([System.Guid]::NewGuid().ToString()))
+   - Linux/Mac: 
+     openssl rand -base64 32
+
+5. Deploy the edge function:
+   supabase functions deploy monthly-export --no-verify-jwt
+
+   Note: We use --no-verify-jwt because this function is called by the database via pg_cron,
+   not by authenticated users. Security is handled via the X-Cron-Secret header.
+
+
+STEP 2: ENABLE REQUIRED EXTENSIONS
+-----------------------------------
+
+Run these SQL commands in your Supabase SQL Editor:
+
+-- Enable pg_cron (if not already enabled)
+CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA pg_catalog;
+GRANT USAGE ON SCHEMA cron TO postgres;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA cron TO postgres;
+
+-- Enable pg_net (if not already enabled)
+CREATE EXTENSION IF NOT EXISTS pg_net WITH SCHEMA extensions;
+
+
+STEP 3: CREATE THE CRON JOB
+----------------------------
+
+Run this SQL in your Supabase SQL Editor:
+
+-- Schedule monthly export to run on the 1st of each month at 00:10 UTC
+SELECT cron.schedule(
+  'monthly-exports',              -- Job name
+  '10 0 1 * *',                  -- Cron schedule: At 00:10 on day 1 of every month
+  $$
+  SELECT net.http_post(
+    url := 'https://YOUR_PROJECT_REF.supabase.co/functions/v1/monthly-export',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'X-Cron-Secret', 'YOUR_CRON_SECRET_HERE'
+    ),
+    body := '{}'::jsonb,
+    timeout_milliseconds := 300000  -- 5 minute timeout
+  ) as request_id;
+  $$
+);
+
+IMPORTANT: Replace:
+- YOUR_PROJECT_REF with your actual Supabase project reference
+- YOUR_CRON_SECRET_HERE with the same secret you set in Step 1
+
+
+STEP 4: VERIFY THE SETUP
+-------------------------
+
+1. Check that the cron job is scheduled:
+   SELECT * FROM cron.job WHERE jobname = 'monthly-exports';
+
+2. Test the edge function manually (via Supabase dashboard or curl):
+   
+   curl -X POST \
+     https://YOUR_PROJECT_REF.supabase.co/functions/v1/monthly-export \
+     -H "X-Cron-Secret: YOUR_CRON_SECRET" \
+     -H "Content-Type: application/json" \
+     -d '{"month":"2026-01"}'
+
+3. Check the exports table for results:
+   SELECT * FROM monthly_exports ORDER BY created_at DESC;
+
+4. Monitor cron job execution:
+   SELECT * FROM cron.job_run_details 
+   WHERE jobid = (SELECT jobid FROM cron.job WHERE jobname = 'monthly-exports')
+   ORDER BY start_time DESC 
+   LIMIT 10;
+
+
+TROUBLESHOOTING
+---------------
+
+If the cron job fails:
+
+1. Check Edge Function logs in Supabase Dashboard > Edge Functions > monthly-export > Logs
+
+2. Check pg_cron execution logs:
+   SELECT * FROM cron.job_run_details 
+   WHERE jobid = (SELECT jobid FROM cron.job WHERE jobname = 'monthly-exports')
+   AND status <> 'succeeded'
+   ORDER BY start_time DESC;
+
+3. Check pg_net response logs:
+   SELECT * FROM net._http_response ORDER BY created DESC LIMIT 10;
+
+4. Verify the cron secret matches:
+   - The secret set with `supabase secrets set CRON_SECRET`
+   - The secret in the cron job SQL (X-Cron-Secret header)
+
+5. Ensure the Edge Function URL is correct (check your project ref)
+
+6. Make sure the exports storage bucket exists (run migration 013)
+
+
+MANUAL EXECUTION
+----------------
+
+You can manually trigger exports via:
+
+1. Admin UI: Go to /admin/exports and use the "Generate New Export" form
+
+2. Direct edge function call (see Step 4 above)
+
+3. SQL (for testing cron job logic):
+   SELECT net.http_post(
+     url := 'https://YOUR_PROJECT_REF.supabase.co/functions/v1/monthly-export',
+     headers := '{"X-Cron-Secret": "YOUR_SECRET", "Content-Type": "application/json"}'::jsonb,
+     body := '{"month":"2026-01"}'::jsonb
+   );
+
+
+UNSCHEDULING
+------------
+
+To disable the monthly export automation:
+
+SELECT cron.unschedule('monthly-exports');
+
+
+CRON SCHEDULE FORMAT
+--------------------
+
+The schedule '10 0 1 * *' means:
+- Minute: 10
+- Hour: 0 (midnight)
+- Day of month: 1 (first day)
+- Month: * (every month)
+- Day of week: * (any day)
+
+Adjust if you want a different schedule. Examples:
+- '0 1 1 * *'  - 01:00 on the 1st of every month
+- '0 0 2 * *'  - 00:00 on the 2nd of every month (allows grace period for late orders)
+- '0 3 * * 1'  - 03:00 every Monday (weekly exports)
+
+
+MONITORING & MAINTENANCE
+------------------------
+
+Recommended monitoring:
+
+1. Set up Supabase alerts for Edge Function errors
+2. Check exports table monthly to ensure automated exports are running
+3. Review storage bucket size periodically (old exports can be archived or deleted)
+4. Monitor pg_cron health: SELECT * FROM cron.job WHERE active = true;
+
+
+SECURITY NOTES
+--------------
+
+- The CRON_SECRET should be a strong, random value
+- Never commit the secret to version control
+- The Edge Function verifies the secret before executing
+- The function uses SUPABASE_SERVICE_ROLE_KEY which bypasses RLS
+- Only admins can view/download exports (via RLS policies)
+- Exports are stored in a private storage bucket
+
+
+COST CONSIDERATIONS
+-------------------
+
+- Edge Function invocations: ~3 per month (one per export type)
+- Storage: CSV files are typically small (<10MB for "small" volume)
+- Bandwidth: Only when admins download exports
+- Database: Minimal - just metadata rows in monthly_exports table
+
+For "small" volume (<200 orders/month, <5k points tx/month), costs are negligible.

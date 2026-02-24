@@ -1,0 +1,111 @@
+AGENT CONTEXT - CBM PLASTICS MERCH SHOP
+========================================
+
+PROJECT HISTORY
+---------------
+This project was duplicated from another MerchShop project located at:
+C:\Users\jorda\OneDrive\Documents\MerchShop
+
+The duplication was completed on [today's date]. This is a completely standalone project with:
+- Separate folder: CBMPlasticsMerchShop (sibling to original MerchShop)
+- Separate database (needs new Supabase project)
+- Separate hosting (will deploy to separate Vercel project)
+- Independent codebase (no monorepo dependencies)
+
+WHAT WAS ALREADY DONE
+--------------------
+✅ Project structure duplicated from the original app/
+✅ packages/core copied into this project
+✅ All imports updated from 'core' to local paths (./packages/core or relative paths)
+✅ Branding updated:
+   - App name: "CBM Store"
+   - Company: "CBM Plastics"
+   - Primary color: #00467F (blue)
+   - Secondary color: #00467F (blue - replaces orange)
+   - Logo path: /CBM Logo.png
+✅ package.json updated (removed monorepo workspace reference)
+✅ tsconfig.json updated (paths point to local packages/core)
+✅ next.config.js updated (removed monorepo references)
+✅ vercel.json updated (standalone build commands)
+✅ globals.css updated (colors changed to #00467F)
+✅ .env.local.example created
+
+WHAT STILL NEEDS TO BE DONE
+---------------------------
+1. ADD LOGO FILE
+   - User needs to add "CBM Logo.png" to the public/ folder
+   - Or update branding.ts if using a different filename
+
+2. CREATE SUPABASE PROJECT
+   - Create new Supabase project at https://app.supabase.com
+   - Name it something like "CBM Plastics Merch Shop"
+   - Choose region (same as original for consistency if possible)
+
+3. RUN DATABASE MIGRATIONS
+   - Go to SQL Editor in Supabase dashboard
+   - Run migrations in order from supabase/migrations/:
+     * 001_initial_schema.sql
+     * 002_rls_policies.sql
+     * 003_seed_data.sql (optional - creates sample products)
+     * Any other migrations in numerical order (004, 005, etc.)
+
+4. GET SUPABASE CREDENTIALS
+   - Go to Project Settings > API
+   - Copy: Project URL, anon/public key, service_role key
+
+5. CREATE .env.local FILE
+   - Copy .env.local.example to .env.local
+   - Fill in Supabase credentials:
+     NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+     NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+     SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
+     NEXT_PUBLIC_SITE_URL=http://localhost:3000
+
+6. CREATE FIRST ADMIN USER
+   - In Supabase dashboard: Authentication > Users > Add User
+   - Create user with email/password
+   - In SQL Editor, run:
+     UPDATE profiles SET role = 'admin' WHERE email = 'your-admin@company.com';
+
+7. INSTALL DEPENDENCIES AND TEST
+   - Run: pnpm install
+   - Run: pnpm dev
+   - Test login with admin credentials
+   - Verify branding appears correctly (blue colors, CBM branding)
+
+8. DEPLOY TO VERCEL (when ready)
+   - Create new Vercel project
+   - Connect this repository
+   - Add environment variables (same as .env.local)
+   - Deploy
+
+TECH STACK
+----------
+- Next.js 15 (App Router)
+- Supabase (Auth + PostgreSQL with RLS)
+- TypeScript
+- Tailwind CSS
+- pnpm (standalone, not monorepo)
+
+KEY FILES
+---------
+- branding.ts - CBM Plastics branding configuration
+- app/layout.tsx - Uses cbmBranding
+- packages/core/ - Local copy of shared UI components
+- supabase/migrations/ - Database migrations (run these in new Supabase project)
+
+IMPORTANT NOTES
+---------------
+- This is NOT a monorepo - it's a standalone Next.js app
+- All imports use local paths (./packages/core or relative paths)
+- Colors are blue (#00467F) throughout - orange was replaced
+- Logo file needs to be added to public/ folder
+- Separate Supabase project required (don't use the original project's database)
+- Separate Vercel deployment (don't deploy to the original project's Vercel)
+
+If you encounter any issues with imports or paths, check that files are importing from:
+- './packages/core/components/...' (for files in root app/)
+- '../../packages/core/components/...' (for files in app/(app)/, app/(admin)/, etc.)
+- '../../../packages/core/components/...' (for deeper nested files)
+
+The project structure is identical to the original, just with updated branding and standalone configuration.

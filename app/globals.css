@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+  --primary: #00467F;
+  --primary-foreground: #ffffff;
+  --secondary: #00467F;
+  --secondary-foreground: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  color: var(--foreground);
+  background: #f9fafb; /* Match bg-gray-50 */
+  font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+}
+
+@layer base {
+  /* Turbopack (lightningcss) rejects ::file-selector-button:disabled.
+     Style the disabled state by putting :disabled before the pseudo-element. */
+  input[type='file']:disabled::file-selector-button {
+    cursor: not-allowed;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}

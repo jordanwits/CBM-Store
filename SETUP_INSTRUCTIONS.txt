@@ -1,0 +1,66 @@
+CBM PLASTICS MERCH SHOP - SETUP INSTRUCTIONS
+============================================
+
+This is a standalone duplicate of the MerchShop project, configured for CBM Plastics.
+
+QUICK START
+-----------
+
+1. INSTALL DEPENDENCIES
+   pnpm install
+
+2. SET UP SUPABASE
+   a) Create a new Supabase project at https://app.supabase.com
+   b) Run migrations in order from supabase/migrations/:
+      - 001_initial_schema.sql
+      - 002_rls_policies.sql
+      - 003_seed_data.sql (optional - creates sample products)
+      - Any other migrations in numerical order
+   c) Get your API credentials from Project Settings > API
+
+3. CONFIGURE ENVIRONMENT VARIABLES
+   Copy .env.local.example to .env.local and fill in your Supabase credentials:
+   NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+   SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
+   NEXT_PUBLIC_SITE_URL=http://localhost:3000
+
+4. CREATE FIRST ADMIN USER
+   In Supabase dashboard:
+   - Go to Authentication > Users
+   - Create a user with email/password
+   - In SQL Editor, run:
+     UPDATE profiles SET role = 'admin' WHERE email = 'your-admin@company.com';
+
+5. ADD LOGO
+   Place your logo file at: public/CBM Logo.png
+   (Update branding.ts if using a different filename)
+
+6. RUN THE APP
+   pnpm dev
+   App runs at: http://localhost:3000
+
+BRANDING CONFIGURATION
+----------------------
+- Primary Color: #00467F (blue)
+- Secondary Color: #00467F (blue - replaces orange)
+- App Name: CBM Store
+- Company Name: CBM Plastics
+- Logo: public/CBM Logo.png (add your logo file)
+
+To update branding, edit: branding.ts
+
+DEPLOYMENT
+----------
+This is configured for standalone deployment on Vercel:
+- Build Command: pnpm build
+- Install Command: pnpm install
+- Framework: Next.js
+
+IMPORTANT NOTES
+---------------
+- This is a completely separate project from the original MerchShop
+- Separate database (new Supabase project required)
+- Separate hosting (deploy to new Vercel project)
+- All imports have been updated to use local packages/core
+- Colors updated: Blue (#00467F) replaces orange throughout
