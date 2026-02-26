@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
+import { submitForgotPassword } from './actions';
 import { Button } from 'core/components/Button';
 import { Input } from 'core/components/Input';
 import { Card, CardHeader, CardContent } from 'core/components/Card';
@@ -14,7 +14,6 @@ export default function ForgotPasswordPage() {
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const supabase = createClient();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,17 +22,15 @@ export default function ForgotPasswordPage() {
     setLoading(true);
 
     try {
-      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://cbmplasticsstore.com';
-      const redirectTo = `${siteUrl}/update-password`;
+      const formData = new FormData();
+      formData.set('email', email);
 
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo,
-      });
+      const result = await submitForgotPassword(formData);
 
-      if (error) {
-        setError(error.message);
-      } else {
+      if (result.success) {
         setSuccess(true);
+      } else {
+        setError(result.error || 'An error occurred');
       }
     } catch (err) {
       setError('An unexpected error occurred');
@@ -46,7 +43,7 @@ export default function ForgotPasswordPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full">
         <div className="text-center mb-8 flex flex-col items-center">
-          <BrandMark 
+          <BrandMark
             showText={false}
             imageClassName="h-24 w-auto"
             className="mb-2"
@@ -69,9 +66,9 @@ export default function ForgotPasswordPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     <div>
-                      <p className="font-medium">Password reset email sent!</p>
+                      <p className="font-medium">Check your email</p>
                       <p className="text-sm mt-1">
-                        If an account exists with {email}, you'll receive an email with instructions to reset your password. Please check your inbox.
+                        If an account exists with that email, you&apos;ll receive a link to reset your password. Please check your inbox.
                       </p>
                     </div>
                   </div>
@@ -87,7 +84,7 @@ export default function ForgotPasswordPage() {
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
                 <p className="text-sm text-gray-600 mb-4">
-                  Enter your email address and we'll send you a link to reset your password.
+                  Enter your email address and we&apos;ll send you a link to reset your password.
                 </p>
 
                 <Input
@@ -129,4 +126,3 @@ export default function ForgotPasswordPage() {
     </div>
   );
 }
-

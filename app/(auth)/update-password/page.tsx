@@ -19,18 +19,13 @@ export default function UpdatePasswordPage() {
   const [success, setSuccess] = useState(false);
   const [isValidSession, setIsValidSession] = useState<boolean | null>(null);
   const [sessionReady, setSessionReady] = useState(false);
-  const [debugInfo, setDebugInfo] = useState<string>('');
 
   useEffect(() => {
     const checkSession = async () => {
       const supabase = createClient();
       
-      // Debug: Log URL info
-      const hash = window.location.hash;
-      const search = window.location.search;
-      setDebugInfo(`Hash: ${hash || 'none'} | Search: ${search || 'none'}`);
-      
       // Parse the hash to extract tokens
+      const hash = window.location.hash;
       const hashParams = new URLSearchParams(hash.substring(1));
       const accessToken = hashParams.get('access_token');
       const refreshToken = hashParams.get('refresh_token');
@@ -41,7 +36,6 @@ export default function UpdatePasswordPage() {
       if (hasToken && accessToken && refreshToken) {
         // Valid token present in URL, explicitly set the session
         setIsValidSession(true);
-        setDebugInfo(prev => `${prev} | Token detected, setting session...`);
         
         try {
           const { data, error } = await supabase.auth.setSession({
@@ -51,13 +45,11 @@ export default function UpdatePasswordPage() {
           
           if (error) {
             console.error('Error setting session:', error);
-            setDebugInfo(prev => `${prev} | Error: ${error.message}`);
             setIsValidSession(false);
             return;
           }
           
           if (data.session) {
-            setDebugInfo(prev => `${prev} | Session established!`);
             setIsValidSession(true);
             setSessionReady(true);
             
@@ -73,8 +65,6 @@ export default function UpdatePasswordPage() {
       
       // Listen for auth state changes
       const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-        console.log('Auth event:', event, 'Session:', !!session);
-        setDebugInfo(prev => `${prev} | Event: ${event}`);
         
         if ((event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') && session) {
           setIsValidSession(true);
@@ -184,12 +174,6 @@ export default function UpdatePasswordPage() {
               <p className="text-gray-600 mb-4">
                 This password reset link is invalid or has expired.
               </p>
-              {debugInfo && (
-                <details className="text-left bg-gray-100 p-3 rounded text-xs text-gray-700 mb-4">
-                  <summary className="cursor-pointer font-semibold">Debug Info</summary>
-                  <pre className="mt-2 whitespace-pre-wrap break-words">{debugInfo}</pre>
-                </details>
-              )}
             </div>
             <Button
               variant="primary"
