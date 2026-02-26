@@ -23,6 +23,7 @@ export function CreateUserModal({ isOpen, onClose, isDevMode, initialEmail, init
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [lastResult, setLastResult] = useState<{ emailSent?: boolean; emailError?: string } | null>(null);
 
   // Update form when initial values change (e.g., when clicking an access request)
   useEffect(() => {
@@ -40,6 +41,7 @@ export function CreateUserModal({ isOpen, onClose, isDevMode, initialEmail, init
     e.preventDefault();
     setError(null);
     setSuccess(false);
+    setLastResult(null);
     setLoading(true);
 
     const result = await createUser({
@@ -51,6 +53,7 @@ export function CreateUserModal({ isOpen, onClose, isDevMode, initialEmail, init
     setLoading(false);
 
     if (result.success) {
+      setLastResult({ emailSent: result.emailSent, emailError: result.emailError });
       setSuccess(true);
       // Reset form
       setEmail('');
@@ -61,6 +64,7 @@ export function CreateUserModal({ isOpen, onClose, isDevMode, initialEmail, init
         router.refresh();
         onClose();
         setSuccess(false);
+        setLastResult(null);
       }, 1500);
     } else {
       setError(result.error || 'Failed to create user');
@@ -74,6 +78,7 @@ export function CreateUserModal({ isOpen, onClose, isDevMode, initialEmail, init
     setRole('user');
     setError(null);
     setSuccess(false);
+    setLastResult(null);
     onClose();
   };
 
@@ -85,6 +90,7 @@ export function CreateUserModal({ isOpen, onClose, isDevMode, initialEmail, init
       setRole('user');
       setError(null);
       setSuccess(false);
+      setLastResult(null);
     }
   }, [isOpen]);
 
@@ -117,9 +123,19 @@ export function CreateUserModal({ isOpen, onClose, isDevMode, initialEmail, init
         )}
 
         {success && (
-          <Alert variant="success" className="mb-4">
+          <Alert variant={lastResult?.emailSent === false ? 'warning' : 'success'} className="mb-4">
             <p className="text-sm">
-              <strong>User invited successfully!</strong> An invitation email has been sent with a link to set their password.
+              {lastResult?.emailSent === false ? (
+                <>
+                  <strong>User created, but the invitation email could not be sent.</strong>{' '}
+                  {lastResult?.emailError ? `(${lastResult.emailError}) ` : ''}
+                  You may need to share the login link with them manually or check that RESEND_API_KEY and FROM_EMAIL are set in your deployment environment.
+                </>
+              ) : (
+                <>
+                  <strong>User invited successfully!</strong> An invitation email has been sent with a link to set their password.
+                </>
+              )}
             </p>
           </Alert>
         )}

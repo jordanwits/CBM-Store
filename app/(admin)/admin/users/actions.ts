@@ -9,6 +9,10 @@ type UserRole = 'user' | 'admin';
 export interface UpdateUserProfileResult {
   success: boolean;
   error?: string;
+  /** True only when invite email was actually sent. False when skipped or failed. */
+  emailSent?: boolean;
+  /** Error message when email failed (not when skipped). */
+  emailError?: string;
 }
 
 function isDevMode() {
@@ -267,10 +271,13 @@ export async function createUser(input: {
     inviteLink,
   });
 
-  if (!emailResult.success) {
-    console.error('Error sending invite email:', emailResult.error);
-    // User is created but email failed - log it but don't fail the operation
-    // Admin can manually resend the invite if needed
+  const emailSent = emailResult.success && !emailResult.skipped;
+  if (!emailSent) {
+    console.error('[Create User] Invite email not sent:', {
+      success: emailResult.success,
+      skipped: emailResult.skipped,
+      error: emailResult.error,
+    });
   }
 
   // Update the profile role if specified (default is 'user' from schema)
@@ -306,7 +313,11 @@ export async function createUser(input: {
   revalidatePath('/admin/users');
   revalidatePath('/admin');
 
-  return { success: true };
+  return {
+    success: true,
+    emailSent,
+    emailError: !emailSent && emailResult.error ? emailResult.error : undefined,
+  };
 }
 
 async function sendInviteEmail(params: {

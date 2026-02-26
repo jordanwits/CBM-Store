@@ -21,10 +21,15 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
                     process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder');
   
   if (isDevMode || !apiKey || !fromEmail) {
-    console.log('[Email] Skipped sending (dev mode or missing config):', {
+    const reason = isDevMode
+      ? 'dev mode (NEXT_PUBLIC_SUPABASE_URL missing or placeholder)'
+      : !apiKey
+        ? 'RESEND_API_KEY not set'
+        : 'FROM_EMAIL not set';
+    console.log('[Email] Skipped sending:', {
       to: params.to,
       subject: params.subject,
-      reason: isDevMode ? 'dev mode' : 'missing config',
+      reason,
     });
     return { success: true, skipped: true };
   }
@@ -46,12 +51,16 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
     });
     
     if (!response.ok) {
-      const error = await response.text();
-      console.error('[Email] Failed to send:', error);
-      return { 
-        success: false, 
-        error: `Failed to send email: ${response.status}` 
-      };
+      const errorBody = await response.text();
+      console.error('[Email] Failed to send:', { status: response.status, body: errorBody });
+      let errorMessage = `Failed to send email: ${response.status}`;
+      try {
+        const parsed = JSON.parse(errorBody);
+        if (parsed?.message) errorMessage = parsed.message;
+      } catch {
+        if (errorBody) errorMessage = errorBody.slice(0, 200);
+      }
+      return { success: false, error: errorMessage };
     }
     
     const data = await response.json();
