@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import BaseLayout from "core/components/BaseLayout";
+import { AuthTokenRedirect } from "@/components/AuthTokenRedirect";
 import { cbmBranding } from "../branding";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
@@ -32,6 +33,7 @@ export default function RootLayout({
 }) {
   return (
     <BaseLayout branding={cbmBranding}>
+      <AuthTokenRedirect />
       {children}
       <SpeedInsights />
       {/* Preload critical logo for faster LCP */}
