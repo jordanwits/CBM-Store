@@ -258,3 +258,60 @@ export function adminOrderStatusEmail(order: OrderStatusData) {
   
   return { subject, html };
 }
+
+interface PointsAdjustmentData {
+  recipientEmail: string;
+  recipientName?: string;
+  deltaPoints: number;
+  reason: string;
+}
+
+export function pointsAdjustmentNotificationEmail(data: PointsAdjustmentData) {
+  const siteUrl = getSiteUrl();
+  const pointsHistoryUrl = `${siteUrl}/points-history`;
+  const isAddition = data.deltaPoints > 0;
+  const absPoints = Math.abs(data.deltaPoints);
+  const subject = isAddition
+    ? `You received ${absPoints.toLocaleString()} points`
+    : `${absPoints.toLocaleString()} points were deducted from your account`;
+  const greeting = data.recipientName ? `Hi ${data.recipientName},` : 'Hi,';
+  const actionText = isAddition
+    ? `We've added ${absPoints.toLocaleString()} points to your account.`
+    : `We've deducted ${absPoints.toLocaleString()} points from your account.`;
+  const html = `<!DOCTYPE html><html><head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${subject}</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background-color: #f8f9fa; border-radius: 8px; padding: 30px; margin-bottom: 20px;">
+    <h1 style="color: #2563eb; margin: 0 0 10px 0;">Points ${isAddition ? 'Added' : 'Adjusted'}</h1>
+    <p style="font-size: 16px; margin: 0; color: #666;">${greeting}</p>
+  </div>
+  <p style="font-size: 16px; margin: 0 0 20px 0;">${actionText}</p>
+  <div style="background-color: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+    <h2 style="font-size: 18px; margin: 0 0 15px 0;">Details</h2>
+    <table style="width: 100%; border-collapse: collapse;">
+      <tr>
+        <td style="padding: 8px 0; border-bottom: 1px solid #f3f4f6;"><strong>Points ${isAddition ? 'Added' : 'Deducted'}:</strong></td>
+        <td style="padding: 8px 0; border-bottom: 1px solid #f3f4f6; text-align: right; color: ${isAddition ? '#059669' : '#dc2626'}; font-weight: bold;">${isAddition ? '+' : ''}${data.deltaPoints.toLocaleString()} points</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px 0;"><strong>Reason:</strong></td>
+        <td style="padding: 8px 0; text-align: right;">${data.reason}</td>
+      </tr>
+    </table>
+  </div>
+  <div style="text-align: center; margin: 30px 0;">
+    <a href="${pointsHistoryUrl}" style="display: inline-block; background-color: #2563eb; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold;">View Points History</a>
+  </div>
+  <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center;">
+    <p style="font-size: 12px; color: #999; margin: 0;">
+      If you have any questions about this adjustment, please contact our support team.
+    </p>
+  </div>
+</body>
+</html>
+  `;
+  return { subject, html };
+}

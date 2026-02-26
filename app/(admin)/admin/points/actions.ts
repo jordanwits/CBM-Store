@@ -1,9 +1,16 @@
 'use server';
 
 import { requireAdmin } from '@/lib/auth/require-admin';
+import { sendEmail } from '@/lib/email/resend';
+import { pointsAdjustmentNotificationEmail } from '@/lib/email/templates';
 import { revalidatePath } from 'next/cache';
 
-export async function adjustUserPoints(userId: string, deltaPoints: number, reason: string) {
+export async function adjustUserPoints(
+  userId: string,
+  deltaPoints: number,
+  reason: string,
+  notifyUser: boolean = false
+) {
   const { supabase, profile } = await requireAdmin();
   
   // Validate inputs
@@ -18,7 +25,7 @@ export async function adjustUserPoints(userId: string, deltaPoints: number, reas
   // Verify user exists
   const { data: targetUser, error: userError } = await supabase
     .from('profiles')
-    .select('id, email')
+    .select('id, email, full_name')
     .eq('id', userId)
     .single();
   
@@ -40,6 +47,26 @@ export async function adjustUserPoints(userId: string, deltaPoints: number, reas
     console.error('Error adjusting user points:', error);
     return { success: false, error: 'Failed to adjust points' };
   }
+
+  // Send notification email if requested
+  if (notifyUser && targetUser.email) {
+    try {
+      const emailResult = await sendEmail({
+        to: targetUser.email,
+        ...pointsAdjustmentNotificationEmail({
+          recipientEmail: targetUser.email,
+          recipientName: targetUser.full_name ?? undefined,
+          deltaPoints,
+          reason: reason.trim(),
+        }),
+      });
+      if (!emailResult.success && !emailResult.skipped) {
+        console.error('Failed to send points notification email:', emailResult.error);
+      }
+    } catch (emailErr) {
+      console.error('Error sending points notification email:', emailErr);
+    }
+  }
   
   // Revalidate relevant pages
   revalidatePath('/admin/points');
@@ -47,10 +74,9 @@ export async function adjustUserPoints(userId: string, deltaPoints: number, reas
   revalidatePath('/dashboard');
   revalidatePath('/points-history');
   
-  return { 
-    success: true, 
-    message: `Successfully ${deltaPoints > 0 ? 'added' : 'deducted'} ${Math.abs(deltaPoints)} points ${deltaPoints > 0 ? 'to' : 'from'} ${targetUser.email}` 
-  };
+  const baseMessage = `Successfully ${deltaPoints > 0 ? 'added' : 'deducted'} ${Math.abs(deltaPoints)} points ${deltaPoints > 0 ? 'to' : 'from'} ${targetUser.email}`;
+  const message = notifyUser ? `${baseMessage} and notified user by email.` : baseMessage;
+  return { success: true, message };
 }
 
 export async function getUsers() {

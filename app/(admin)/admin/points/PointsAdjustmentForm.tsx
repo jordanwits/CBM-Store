@@ -20,7 +20,9 @@ interface User {
 export default function PointsAdjustmentForm({ isDevMode }: PointsAdjustmentFormProps) {
   const [users, setUsers] = useState<User[]>([]);
   const [selectedUserId, setSelectedUserId] = useState('');
-  const [deltaPoints, setDeltaPoints] = useState('');
+  const [pointsAmount, setPointsAmount] = useState('');
+  const [isAdding, setIsAdding] = useState(true);
+  const [notifyUser, setNotifyUser] = useState(false);
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingUsers, setLoadingUsers] = useState(false);
@@ -53,15 +55,16 @@ export default function PointsAdjustmentForm({ isDevMode }: PointsAdjustmentForm
     setMessage(null);
     setLoading(true);
 
-    const points = parseInt(deltaPoints, 10);
-    const result = await adjustUserPoints(selectedUserId, points, reason);
+    const amount = parseInt(pointsAmount, 10);
+    const deltaPoints = isAdding ? amount : -amount;
+    const result = await adjustUserPoints(selectedUserId, deltaPoints, reason, notifyUser);
 
     setLoading(false);
 
     if (result.success) {
       setMessage({ type: 'success', text: result.message || 'Points adjusted successfully!' });
       // Reset form
-      setDeltaPoints('');
+      setPointsAmount('');
       setReason('');
       setTimeout(() => setMessage(null), 5000);
     } else {
@@ -117,17 +120,51 @@ export default function PointsAdjustmentForm({ isDevMode }: PointsAdjustmentForm
         </div>
 
         <div>
-          <Input
-            label="Points Adjustment"
-            type="number"
-            value={deltaPoints}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDeltaPoints(e.target.value)}
-            disabled={isDevMode || loading}
-            placeholder="e.g., 100 or -50"
-            required
-          />
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Points Adjustment
+          </label>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsAdding(false)}
+              disabled={isDevMode || loading}
+              className={`flex items-center justify-center gap-1 px-3 py-2 rounded-md border text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                !isAdding
+                  ? 'border-red-200 bg-red-50 text-red-700'
+                  : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              <span>−</span> Subtract
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsAdding(true)}
+              disabled={isDevMode || loading}
+              className={`flex items-center justify-center gap-1 px-3 py-2 rounded-md border text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                isAdding
+                  ? 'border-green-200 bg-green-50 text-green-700'
+                  : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              <span>+</span> Add
+            </button>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              value={pointsAmount}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                const val = e.target.value;
+                if (val === '' || /^\d+$/.test(val)) setPointsAmount(val);
+              }}
+              placeholder="Amount"
+              required
+              disabled={isDevMode || loading}
+              className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-500"
+            />
+          </div>
           <p className="text-xs text-gray-700 mt-1">
-            Use positive numbers to add points, negative to deduct
+            Choose add or subtract, then enter the points amount
           </p>
         </div>
       </div>
@@ -144,11 +181,25 @@ export default function PointsAdjustmentForm({ isDevMode }: PointsAdjustmentForm
         />
       </div>
 
+      <div className="flex items-center gap-2">
+        <input
+          id="notify-user"
+          type="checkbox"
+          checked={notifyUser}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNotifyUser(e.target.checked)}
+          disabled={isDevMode || loading}
+          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+        />
+        <label htmlFor="notify-user" className="text-sm font-medium text-gray-700">
+          Notify user by email
+        </label>
+      </div>
+
       <div className="flex justify-end">
         <Button
           type="submit"
           variant="primary"
-          disabled={isDevMode || loading || !selectedUserId || !deltaPoints || !reason}
+          disabled={isDevMode || loading || !selectedUserId || !pointsAmount || !reason}
         >
           {loading ? 'Adjusting...' : 'Adjust Points'}
         </Button>
