@@ -36,15 +36,6 @@ export default function RootLayout({
       <AuthTokenRedirect />
       {children}
       <SpeedInsights />
-      {/* Preload critical logo for faster LCP */}
-      {cbmBranding.logo && (
-        <link
-          rel="preload"
-          href={cbmBranding.logo.src}
-          as="image"
-          type="image/png"
-        />
-      )}
     </BaseLayout>
   );
 }
