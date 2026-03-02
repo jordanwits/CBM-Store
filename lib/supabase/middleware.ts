@@ -8,6 +8,13 @@ export async function updateSession(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
 
+  // Normalize root path before auth (avoids redirect() in RootPage = no NEXT_REDIRECT console noise)
+  if (pathname === '/') {
+    const url = request.nextUrl.clone();
+    url.pathname = '/home';
+    return NextResponse.redirect(url);
+  }
+
   // Only run Supabase session refresh logic on routes that actually need auth state.
   // This avoids a network roundtrip on marketing/static pages and reduces click-to-open latency.
   const isAppRoute =
@@ -26,7 +33,9 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith('/update-password') ||
     pathname.startsWith('/forgot-password');
 
-  if (!isAppRoute && !isAuthRoute) {
+  const isHomeRoute = pathname === '/home';
+
+  if (!isAppRoute && !isAuthRoute && !isHomeRoute) {
     return supabaseResponse;
   }
 
@@ -85,6 +94,12 @@ export async function updateSession(request: NextRequest) {
       // This is expected after logout or token expiration
       isAuthenticated = false;
     }
+  }
+
+  if (isHomeRoute && isAuthenticated) {
+    const url = request.nextUrl.clone();
+    url.pathname = '/dashboard';
+    return NextResponse.redirect(url);
   }
 
   if (isAppRoute && !isAuthenticated) {

@@ -5,6 +5,7 @@
   "scripts": {
     "migrate": "node scripts/run-migrations.js",
     "migrate:api": "node scripts/run-migrations-api.js",
+    "clean": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\"",
     "dev": "next dev",
     "dev:turbo": "next dev --turbopack",
     "build": "next build",
