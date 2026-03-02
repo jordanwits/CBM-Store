@@ -30,7 +30,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     type: 'website',
-    images: [cbmBranding.logo.src],
+    images: [cbmBranding.logo?.src ?? '/cbmFavicon.png'],
   },
   // Optimize robots and indexing
   robots: {
