@@ -26,11 +26,11 @@ export const metadata: Metadata = {
   // Performance optimizations
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://cbmplasticsstore.com'),
   icons: {
-    icon: '/cbmFavicon.png?v=2',
+    icon: '/cbmFavicon.png?v=3',
   },
   openGraph: {
     type: 'website',
-    images: ['/cbmFavicon.png?v=2'],
+    images: ['/cbmFavicon.png?v=3'],
   },
   // Optimize robots and indexing
   robots: {
