@@ -5,6 +5,7 @@ import { PageHeader } from 'core/components/PageHeader';
 import { EmptyState } from 'core/components/EmptyState';
 import { Badge } from 'core/components/Badge';
 import { Button } from 'core/components/Button';
+import { FormattedDate } from 'core/components/FormattedDate';
 import Link from 'next/link';
 import { RecentTransactionsCard } from './RecentTransactionsCard';
 import { HistoryFilters } from './HistoryFilters';
@@ -202,7 +203,7 @@ export default async function PointsHistoryPage({ searchParams }: PointsHistoryP
       return `Custom range`;
     }
     if (startDate) {
-      return `From ${new Date(startDate).toLocaleDateString()}`;
+      return <>From <FormattedDate date={startDate} format="date" /></>;
     }
     if (daysFilter === null) {
       // Check if any other filters are active
@@ -340,13 +341,7 @@ export default async function PointsHistoryPage({ searchParams }: PointsHistoryP
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold text-gray-900 truncate">{entry.reason}</p>
                         <p className="text-sm text-gray-500 mt-0.5">
-                          {new Date(entry.created_at).toLocaleDateString('en-US', { 
-                            month: 'short', 
-                            day: 'numeric', 
-                            year: 'numeric',
-                            hour: 'numeric',
-                            minute: '2-digit'
-                          })}
+                          <FormattedDate date={entry.created_at} format="datetimeShort" />
                         </p>
                       </div>
                     </div>

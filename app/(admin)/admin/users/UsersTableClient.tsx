@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from 'core/components/Button';
 import { Input } from 'core/components/Input';
 import { Alert } from 'core/components/Alert';
+import { FormattedDate } from 'core/components/FormattedDate';
 import { setUserActive, updateUserProfile, deleteUser } from './actions';
 
 type UserRow = {
@@ -401,7 +402,7 @@ export function UsersTableClient({
                     </span>
                   </div>
                   <p className="text-gray-500 text-xs">
-                    Created {new Date(u.created_at).toLocaleDateString()}
+                    Created <FormattedDate date={u.created_at} format="date" />
                   </p>
                 </div>
                 <div className="flex items-center justify-between gap-2 pt-3 border-t border-gray-100">
@@ -548,7 +549,7 @@ export function UsersTableClient({
                     </td>
 
                     <td className="px-4 py-3 text-sm text-gray-500">
-                      {new Date(u.created_at).toLocaleDateString()}
+                      <FormattedDate date={u.created_at} format="date" />
                     </td>
 
                     <td className="px-4 py-3 text-sm">

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Button } from 'core/components/Button';
 import { Card, CardHeader, CardContent } from 'core/components/Card';
+import { FormattedDate } from 'core/components/FormattedDate';
 import { UsersTableClient } from './UsersTableClient';
 import { CreateUserModal } from './CreateUserModal';
 
@@ -106,7 +107,7 @@ export function UsersPageClient({ isDevMode, users, accessRequests, currentAdmin
                         <p className="text-sm text-gray-500 mt-2 line-clamp-2">{request.message}</p>
                       )}
                       <p className="text-xs text-gray-400 mt-2">
-                        Requested {new Date(request.created_at).toLocaleDateString()}
+                        Requested <FormattedDate date={request.created_at} format="date" />
                       </p>
                     </div>
                     <svg

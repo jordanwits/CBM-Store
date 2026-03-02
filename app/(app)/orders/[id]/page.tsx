@@ -5,6 +5,7 @@ import { PageHeader } from 'core/components/PageHeader';
 import { Badge } from 'core/components/Badge';
 import { BackButton } from 'core/components/BackButton';
 import { Button } from 'core/components/Button';
+import { FormattedDate } from 'core/components/FormattedDate';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -138,13 +139,7 @@ export default async function OrderDetailPage({
             Order #{order.id.slice(0, 8).toUpperCase()}
           </h1>
           <p className="text-gray-600">
-            Placed on {new Date(order.created_at).toLocaleDateString('en-US', { 
-              month: 'long', 
-              day: 'numeric', 
-              year: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit'
-            })}
+            Placed on <FormattedDate date={order.created_at} format="datetimeShort" />
           </p>
         </div>
         <div className="flex flex-wrap gap-3">

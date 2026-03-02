@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { Card, CardHeader, CardContent } from 'core/components/Card';
 import { Button } from 'core/components/Button';
 import { Badge } from 'core/components/Badge';
+import { FormattedDate } from 'core/components/FormattedDate';
 import { PageHeader } from 'core/components/PageHeader';
 import Link from 'next/link';
 import PointsAdjustmentForm from './PointsAdjustmentForm';
@@ -224,7 +225,7 @@ export default async function AdminPointsPage({ searchParams }: AdminPointsPageP
       return `Custom range`;
     }
     if (startDate) {
-      return `From ${new Date(startDate).toLocaleDateString()}`;
+      return <>From <FormattedDate date={startDate} format="date" /></>;
     }
     if (daysFilter === null) {
       if (type !== 'all' || minPoints !== null || maxPoints !== null || reason || userEmail) {
@@ -406,13 +407,7 @@ export default async function AdminPointsPage({ searchParams }: AdminPointsPageP
                                   {entry.profiles?.email || 'Unknown user'}
                                 </p>
                                 <p className="text-sm text-gray-500">
-                                  {new Date(entry.created_at).toLocaleDateString('en-US', { 
-                                    month: 'short', 
-                                    day: 'numeric', 
-                                    year: 'numeric',
-                                    hour: 'numeric',
-                                    minute: '2-digit'
-                                  })}
+                                  <FormattedDate date={entry.created_at} format="datetimeShort" />
                                 </p>
                               </div>
                             </div>

@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { getJwtSubject } from '@/lib/auth/jwt';
 import { Card, CardHeader, CardContent } from 'core/components/Card';
 import { Badge } from 'core/components/Badge';
+import { FormattedDate } from 'core/components/FormattedDate';
 
 interface RecentTransactionsCardProps {
   isDevMode: boolean;
@@ -112,13 +113,7 @@ export async function RecentTransactionsCard({ isDevMode, userId }: RecentTransa
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold text-gray-900 truncate">{entry.reason}</p>
                         <p className="text-sm text-gray-500 mt-0.5">
-                          {new Date(entry.created_at).toLocaleDateString('en-US', { 
-                            month: 'short', 
-                            day: 'numeric', 
-                            year: 'numeric',
-                            hour: 'numeric',
-                            minute: '2-digit'
-                          })}
+                          <FormattedDate date={entry.created_at} format="datetimeShort" />
                         </p>
                       </div>
                     </div>

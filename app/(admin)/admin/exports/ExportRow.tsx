@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Button } from 'core/components/Button';
 import { Badge } from 'core/components/Badge';
+import { FormattedDate } from 'core/components/FormattedDate';
 import { ConfirmModal } from 'core/components/ConfirmModal';
 import { deleteExport, getExportDownloadUrl } from './actions';
 
@@ -56,16 +57,6 @@ export function ExportRow({ exportRecord, isDevMode }: ExportRowProps) {
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    });
-  };
-
   const getTypeVariant = (type: string) => {
     switch (type) {
       case 'orders':
@@ -97,7 +88,7 @@ export function ExportRow({ exportRecord, isDevMode }: ExportRowProps) {
           {exportRecord.file_size_bytes ? formatFileSize(exportRecord.file_size_bytes) : '—'}
         </td>
         <td className="py-4 pr-4 text-sm text-gray-600">
-          <div>{formatDate(exportRecord.created_at)}</div>
+          <div><FormattedDate date={exportRecord.created_at} format="datetimeShort" /></div>
           {exportRecord.profiles?.email && (
             <div className="text-xs text-gray-500 mt-0.5">by {exportRecord.profiles.email}</div>
           )}

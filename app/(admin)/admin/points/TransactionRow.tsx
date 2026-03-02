@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { FormattedDate } from 'core/components/FormattedDate';
 
 interface Transaction {
   id: string;
@@ -63,7 +64,7 @@ export function TransactionRow({ transaction }: TransactionRowProps) {
         </td>
         <td className="px-4 py-5 text-sm text-gray-700 group-hover:bg-blue-50 transition-colors">
           <Link href={`/admin/orders/${transaction.order_id}`} className="block">
-            {new Date(transaction.created_at).toLocaleString()}
+            <FormattedDate date={transaction.created_at} format="long" />
           </Link>
         </td>
       </tr>
@@ -91,7 +92,7 @@ export function TransactionRow({ transaction }: TransactionRowProps) {
         </div>
       </td>
       <td className="px-4 py-5 text-sm text-gray-700">
-        {new Date(transaction.created_at).toLocaleString()}
+        <FormattedDate date={transaction.created_at} format="long" />
       </td>
     </tr>
   );

@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { Card, CardHeader, CardContent } from 'core/components/Card';
 import { Button } from 'core/components/Button';
+import { FormattedDate } from 'core/components/FormattedDate';
 import { ClickableTableRow } from './ClickableTableRow';
 import { OrderPeriodFilter } from './OrderPeriodFilter';
 import { OrderListActions } from './OrderListActions';
@@ -184,7 +185,7 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
                       </div>
                       <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-100">
                         <span className="text-sm font-semibold text-gray-900">{order.total_points} pts</span>
-                        <span className="text-sm text-gray-600">{new Date(order.created_at).toLocaleDateString()}</span>
+                        <span className="text-sm text-gray-600"><FormattedDate date={order.created_at} format="date" /></span>
                         <OrderActionsCell>
                           <OrderListActions orderId={order.id} isDevMode={isDevMode} />
                         </OrderActionsCell>
@@ -270,7 +271,7 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
                         </span>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-700">
-                        {new Date(order.created_at).toLocaleDateString()}
+                        <FormattedDate date={order.created_at} format="date" />
                       </td>
                       <td className="px-4 py-3 text-sm">
                         <OrderActionsCell>

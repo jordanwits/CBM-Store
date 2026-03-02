@@ -5,6 +5,7 @@ import { PageHeader } from 'core/components/PageHeader';
 import { Badge } from 'core/components/Badge';
 import { EmptyState } from 'core/components/EmptyState';
 import { Button } from 'core/components/Button';
+import { FormattedDate } from 'core/components/FormattedDate';
 import Link from 'next/link';
 import { OrdersPeriodFilter } from './OrdersPeriodFilter';
 
@@ -148,11 +149,7 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                           </svg>
-                          Placed {new Date(order.created_at).toLocaleDateString('en-US', { 
-                            month: 'long', 
-                            day: 'numeric', 
-                            year: 'numeric' 
-                          })}
+                          Placed <FormattedDate date={order.created_at} format="dateLong" />
                         </div>
                         <div className="flex items-center gap-2">
                           {order.delivery_method === 'delivery' ? (

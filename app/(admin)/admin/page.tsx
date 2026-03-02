@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { Card, CardHeader, CardContent } from 'core/components/Card';
+import { FormattedDate } from 'core/components/FormattedDate';
 import Link from 'next/link';
 
 export default async function AdminDashboardPage() {
@@ -163,7 +164,7 @@ export default async function AdminDashboardPage() {
                         {order.delivery_method === 'pickup' ? 'Pickup' : 'Delivery'}
                       </span>
                       <span className="font-semibold text-gray-900">{order.total_points} pts</span>
-                      <span className="text-gray-500">{new Date(order.created_at).toLocaleDateString()}</span>
+                      <span className="text-gray-500"><FormattedDate date={order.created_at} format="date" /></span>
                     </div>
                   </div>
                 </Link>
@@ -235,7 +236,7 @@ export default async function AdminDashboardPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-700">
-                        {new Date(order.created_at).toLocaleDateString()}
+                        <FormattedDate date={order.created_at} format="date" />
                       </td>
                     </tr>
                   ))}
