@@ -1,11 +1,13 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from 'core/components/Button';
 import { Card, CardHeader, CardContent } from 'core/components/Card';
 import { FormattedDate } from 'core/components/FormattedDate';
 import { UsersTableClient } from './UsersTableClient';
 import { CreateUserModal } from './CreateUserModal';
+import { declineAccessRequest } from './actions';
 
 type UserRow = {
   id: string;
@@ -36,6 +38,8 @@ interface UsersPageClientProps {
 export function UsersPageClient({ isDevMode, users, accessRequests, currentAdminId }: UsersPageClientProps) {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [initialFormData, setInitialFormData] = useState<{ email?: string; fullName?: string } | null>(null);
+  const [decliningId, setDecliningId] = useState<string | null>(null);
+  const router = useRouter();
 
   return (
     <div>
@@ -110,19 +114,38 @@ export function UsersPageClient({ isDevMode, users, accessRequests, currentAdmin
                         Requested <FormattedDate date={request.created_at} format="date" />
                       </p>
                     </div>
-                    <svg
-                      className="w-5 h-5 text-gray-400 shrink-0 mt-1"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 5l7 7-7 7"
-                      />
-                    </svg>
+                    <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setInitialFormData({ email: request.email, fullName: request.full_name });
+                          setIsCreateModalOpen(true);
+                        }}
+                        disabled={isDevMode}
+                      >
+                        Approve
+                      </Button>
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          setDecliningId(request.id);
+                          const result = await declineAccessRequest({ requestId: request.id });
+                          setDecliningId(null);
+                          if (result.success) {
+                            router.refresh();
+                          } else {
+                            alert(result.error ?? 'Failed to decline request');
+                          }
+                        }}
+                        disabled={isDevMode || decliningId === request.id}
+                      >
+                        {decliningId === request.id ? 'Declining...' : 'Decline'}
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ))}
