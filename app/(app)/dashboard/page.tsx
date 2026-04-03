@@ -5,6 +5,7 @@ import { Badge } from 'core/components/Badge';
 import Link from 'next/link';
 import Image from 'next/image';
 import { StorefrontControls } from './StorefrontControls';
+import { SuggestProductButton } from './SuggestProductButton';
 import { FilterPanel } from './FilterPanel';
 import { FilterDrawer } from 'core/components/FilterDrawer';
 import { getStoreSettings, getFilterMetadata } from '@/lib/cache/store-data';
@@ -391,8 +392,13 @@ export default async function DashboardPage({
         <div className="flex-1 min-w-0 flex flex-col gap-4">
         {/* Search row - Filters button to right of search on mobile */}
         <div className="flex flex-row gap-3 items-start shrink-0">
-          <div className="flex-1 min-w-0 order-1 lg:order-2">
-            <StorefrontControls currentSort={params.sort || 'featured'} />
+          <div className="flex-1 min-w-0 order-1 lg:order-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+            <div className="flex-1 min-w-0">
+              <StorefrontControls currentSort={params.sort || 'featured'} />
+            </div>
+            <div className="flex justify-end sm:justify-start sm:shrink-0 sm:pt-0.5">
+              <SuggestProductButton isDevMode={isDevMode} />
+            </div>
           </div>
           <div className="order-2 lg:order-1 flex-shrink-0 lg:hidden">
             <FilterDrawer
