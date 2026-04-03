@@ -3,13 +3,20 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { signInWithPhonePassword } from './actions';
 import { Button } from 'core/components/Button';
 import { Input } from 'core/components/Input';
+import { PhoneInput } from 'core/components/PhoneInput';
+import { isCompleteNanpDigits } from 'core/lib/phone-format';
 import { Card, CardHeader, CardContent } from 'core/components/Card';
 import { BrandMark } from 'core/components/BrandMark';
 
+type LoginMethod = 'email' | 'phone';
+
 export default function LoginPage() {
+  const [loginMethod, setLoginMethod] = useState<LoginMethod>('email');
   const [email, setEmail] = useState('');
+  const [phoneDigits, setPhoneDigits] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
@@ -23,16 +30,25 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) {
-        setError(error.message);
+      if (loginMethod === 'phone') {
+        const result = await signInWithPhonePassword({ phone: phoneDigits, password });
+        if (!result.ok) {
+          setError(result.error);
+        } else {
+          router.push('/dashboard');
+          router.refresh();
+        }
       } else {
-        router.push('/dashboard');
-        router.refresh();
+        const { error: signError } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
+        if (signError) {
+          setError(signError.message);
+        } else {
+          router.push('/dashboard');
+          router.refresh();
+        }
       }
     } catch (err) {
       setError('An unexpected error occurred');
@@ -61,15 +77,59 @@ export default function LoginPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleLogin} className="space-y-4">
-              <Input
-                label="Email"
-                type="email"
-                value={email}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
-                required
-                autoComplete="email"
-                placeholder="you@company.com"
-              />
+              <div className="flex rounded-lg border border-gray-300 p-0.5 bg-gray-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLoginMethod('email');
+                    setPhoneDigits('');
+                    setError('');
+                  }}
+                  className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
+                    loginMethod === 'email'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Email
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLoginMethod('phone');
+                    setError('');
+                  }}
+                  className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
+                    loginMethod === 'phone'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Phone
+                </button>
+              </div>
+
+              {loginMethod === 'email' ? (
+                <Input
+                  label="Email"
+                  type="email"
+                  value={email}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
+                  required
+                  autoComplete="email"
+                  placeholder="you@company.com"
+                />
+              ) : (
+                <PhoneInput
+                  label="Phone number"
+                  digits={phoneDigits}
+                  onDigitsChange={setPhoneDigits}
+                  name="phone"
+                />
+              )}
+              {loginMethod === 'phone' && (
+                <p className="text-xs text-gray-500 -mt-2">US numbers only. Digits and formatting are applied for you.</p>
+              )}
 
               <div className="w-full">
                 <label
@@ -109,14 +169,16 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              <div className="flex justify-end">
-                <a 
-                  href="/forgot-password" 
-                  className="text-sm text-primary hover:underline font-medium"
-                >
-                  Forgot password?
-                </a>
-              </div>
+              {loginMethod === 'email' && (
+                <div className="flex justify-end">
+                  <a
+                    href="/forgot-password"
+                    className="text-sm text-primary hover:underline font-medium"
+                  >
+                    Forgot password?
+                  </a>
+                </div>
+              )}
 
               {error && (
                 <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
@@ -128,7 +190,10 @@ export default function LoginPage() {
                 type="submit"
                 variant="primary"
                 className="w-full"
-                disabled={loading}
+                disabled={
+                  loading ||
+                  (loginMethod === 'phone' && !isCompleteNanpDigits(phoneDigits))
+                }
               >
                 {loading ? 'Signing in...' : 'Sign In'}
               </Button>

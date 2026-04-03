@@ -17,7 +17,7 @@ export default async function AdminUsersPage() {
     // Get all users
     const { data: profilesData } = await supabase
       .from('profiles')
-      .select('id,email,full_name,role,active,created_at')
+      .select('id,email,phone,full_name,role,active,created_at')
       .order('created_at', { ascending: false });
     
     // Get point balances for all users efficiently
@@ -54,6 +54,7 @@ export default async function AdminUsersPage() {
       {
         id: '1',
         email: 'admin@cbmplastics.com',
+        phone: null,
         full_name: 'Admin User',
         role: 'admin',
         active: true,
@@ -63,6 +64,7 @@ export default async function AdminUsersPage() {
       {
         id: '2',
         email: 'user@cbmplastics.com',
+        phone: null,
         full_name: 'Test User',
         role: 'user',
         active: true,

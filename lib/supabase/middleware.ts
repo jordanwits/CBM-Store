@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { userMustChangePassword } from '@/lib/auth/must-change-password';
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -82,12 +83,14 @@ export async function updateSession(request: NextRequest) {
   const shouldRefresh = !session || (expiresAtMs > 0 && expiresAtMs - Date.now() < refreshGraceMs);
 
   let isAuthenticated = Boolean(session?.access_token);
+  let authedUser: Awaited<ReturnType<typeof supabase.auth.getUser>>['data']['user'] = null;
 
   if (shouldRefresh) {
     try {
       const {
         data: { user: refreshedUser },
       } = await supabase.auth.getUser();
+      authedUser = refreshedUser;
       isAuthenticated = Boolean(refreshedUser);
     } catch (error) {
       // If refresh fails (e.g., invalid refresh token), treat as unauthenticated
@@ -96,9 +99,34 @@ export async function updateSession(request: NextRequest) {
     }
   }
 
+  if (isAuthenticated && !authedUser) {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      authedUser = user;
+    } catch {
+      authedUser = null;
+    }
+  }
+
+  const mustChangePassword = userMustChangePassword(authedUser);
+  const onUpdatePassword = pathname.startsWith('/update-password');
+  const onLogout = pathname.startsWith('/logout');
+
+  if (isAuthenticated && mustChangePassword && !onUpdatePassword && !onLogout) {
+    const url = request.nextUrl.clone();
+    url.pathname = '/update-password';
+    url.searchParams.set('required', '1');
+    return NextResponse.redirect(url);
+  }
+
   if (isHomeRoute && isAuthenticated) {
     const url = request.nextUrl.clone();
-    url.pathname = '/dashboard';
+    url.pathname = mustChangePassword ? '/update-password' : '/dashboard';
+    if (mustChangePassword) {
+      url.searchParams.set('required', '1');
+    }
     return NextResponse.redirect(url);
   }
 
@@ -114,7 +142,12 @@ export async function updateSession(request: NextRequest) {
     // But allow /update-password to process password reset tokens
     if (request.nextUrl.pathname === '/login') {
       const url = request.nextUrl.clone();
-      url.pathname = '/dashboard';
+      if (mustChangePassword) {
+        url.pathname = '/update-password';
+        url.searchParams.set('required', '1');
+      } else {
+        url.pathname = '/dashboard';
+      }
       return NextResponse.redirect(url);
     }
   }

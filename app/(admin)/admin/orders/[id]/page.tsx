@@ -29,7 +29,7 @@ export default async function AdminOrderDetailPage({
   const [orderResult, itemsResult, refundCheck] = await Promise.all([
     supabase
       .from('orders')
-      .select('*, profiles(email, full_name)')
+      .select('*, profiles(email, phone, full_name)')
       .eq('id', id)
       .single(),
     supabase
@@ -87,8 +87,12 @@ export default async function AdminOrderDetailPage({
           <CardContent>
             <div className="space-y-2">
               <div>
-                <p className="text-sm text-gray-700 font-medium">Email</p>
-                <p className="font-medium text-gray-900 mt-1">{(order as any).profiles?.email || 'N/A'}</p>
+                <p className="text-sm text-gray-700 font-medium">Email / phone</p>
+                <p className="font-medium text-gray-900 mt-1">
+                  {(order as any).profiles?.email?.trim() ||
+                    (order as any).profiles?.phone?.trim() ||
+                    'N/A'}
+                </p>
               </div>
               <div>
                 <p className="text-sm text-gray-700 font-medium">Full Name</p>

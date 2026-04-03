@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from 'core/components/Button';
 import { Input } from 'core/components/Input';
+import { PhoneInput } from 'core/components/PhoneInput';
+import { isCompleteNanpDigits } from 'core/lib/phone-format';
 import { Alert } from 'core/components/Alert';
 import { createUser } from './actions';
 
@@ -15,21 +17,30 @@ interface CreateUserModalProps {
   initialFullName?: string;
 }
 
+type AuthMethod = 'email' | 'phone';
+
 export function CreateUserModal({ isOpen, onClose, isDevMode, initialEmail, initialFullName }: CreateUserModalProps) {
   const router = useRouter();
+  const [authMethod, setAuthMethod] = useState<AuthMethod>('email');
   const [email, setEmail] = useState('');
+  const [phoneDigits, setPhoneDigits] = useState('');
   const [fullName, setFullName] = useState('');
   const [role, setRole] = useState<'user' | 'admin'>('user');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [lastResult, setLastResult] = useState<{ emailSent?: boolean; emailError?: string } | null>(null);
+  const [lastResult, setLastResult] = useState<{
+    emailSent?: boolean;
+    emailError?: string;
+    temporaryPassword?: string;
+  } | null>(null);
 
   // Update form when initial values change (e.g., when clicking an access request)
   useEffect(() => {
     if (isOpen) {
       if (initialEmail) {
         setEmail(initialEmail);
+        setAuthMethod('email');
       }
       if (initialFullName) {
         setFullName(initialFullName);
@@ -44,28 +55,45 @@ export function CreateUserModal({ isOpen, onClose, isDevMode, initialEmail, init
     setLastResult(null);
     setLoading(true);
 
-    const result = await createUser({
-      email: email.trim(),
-      fullName: fullName.trim() || undefined,
-      role,
-    });
+    const result = await createUser(
+      authMethod === 'phone'
+        ? {
+            authMethod: 'phone',
+            phone: phoneDigits,
+            fullName: fullName.trim() || undefined,
+            role,
+          }
+        : {
+            authMethod: 'email',
+            email: email.trim(),
+            fullName: fullName.trim() || undefined,
+            role,
+          }
+    );
 
     setLoading(false);
 
     if (result.success) {
-      setLastResult({ emailSent: result.emailSent, emailError: result.emailError });
+      setLastResult({
+        emailSent: result.emailSent,
+        emailError: result.emailError,
+        temporaryPassword: result.temporaryPassword,
+      });
       setSuccess(true);
-      // Reset form
       setEmail('');
+      setPhoneDigits('');
       setFullName('');
       setRole('user');
-      // Refresh and close after a brief delay
-      setTimeout(() => {
+      if (!result.temporaryPassword) {
+        setTimeout(() => {
+          router.refresh();
+          onClose();
+          setSuccess(false);
+          setLastResult(null);
+        }, 1500);
+      } else {
         router.refresh();
-        onClose();
-        setSuccess(false);
-        setLastResult(null);
-      }, 1500);
+      }
     } else {
       setError(result.error || 'Failed to create user');
     }
@@ -74,8 +102,10 @@ export function CreateUserModal({ isOpen, onClose, isDevMode, initialEmail, init
   const handleClose = () => {
     if (loading) return;
     setEmail('');
+    setPhoneDigits('');
     setFullName('');
     setRole('user');
+    setAuthMethod('email');
     setError(null);
     setSuccess(false);
     setLastResult(null);
@@ -86,8 +116,10 @@ export function CreateUserModal({ isOpen, onClose, isDevMode, initialEmail, init
   useEffect(() => {
     if (!isOpen) {
       setEmail('');
+      setPhoneDigits('');
       setFullName('');
       setRole('user');
+      setAuthMethod('email');
       setError(null);
       setSuccess(false);
       setLastResult(null);
@@ -123,20 +155,62 @@ export function CreateUserModal({ isOpen, onClose, isDevMode, initialEmail, init
         )}
 
         {success && (
-          <Alert variant={lastResult?.emailSent === false ? 'warning' : 'success'} className="mb-4">
-            <p className="text-sm">
-              {lastResult?.emailSent === false ? (
-                <>
-                  <strong>User created, but the invitation email could not be sent.</strong>{' '}
-                  {lastResult?.emailError ? `(${lastResult.emailError}) ` : ''}
-                  You may need to share the login link with them manually or check that RESEND_API_KEY and FROM_EMAIL are set in your deployment environment.
-                </>
-              ) : (
-                <>
-                  <strong>User invited successfully!</strong> An invitation email has been sent with a link to set their password.
-                </>
-              )}
-            </p>
+          <Alert
+            variant={
+              lastResult?.temporaryPassword
+                ? 'warning'
+                : lastResult?.emailSent === false
+                  ? 'warning'
+                  : 'success'
+            }
+            className="mb-4 space-y-3"
+          >
+            {lastResult?.temporaryPassword ? (
+              <>
+                <p className="text-sm font-semibold text-gray-900">Phone user created</p>
+                <p className="text-sm text-gray-700">
+                  Share this one-time password with them securely (in person is best). They should choose{' '}
+                  <strong>Phone</strong> on the login page using the same number (they can enter it with automatic
+                  formatting).
+                  On first sign-in they will be required to set a new password before using the site.
+                </p>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                  <code className="flex-1 text-xs sm:text-sm bg-gray-100 px-3 py-2 rounded border border-gray-200 break-all">
+                    {lastResult.temporaryPassword}
+                  </code>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(lastResult.temporaryPassword || '');
+                    }}
+                  >
+                    Copy password
+                  </Button>
+                </div>
+                <Button type="button" variant="primary" className="w-full" onClick={handleClose}>
+                  Done
+                </Button>
+              </>
+            ) : (
+              <p className="text-sm">
+                {lastResult?.emailSent === false ? (
+                  <>
+                    <strong>User created, but the invitation email could not be sent.</strong>{' '}
+                    {lastResult?.emailError ? `(${lastResult.emailError}) ` : ''}
+                    You may need to share the login link with them manually or check that RESEND_API_KEY and FROM_EMAIL
+                    are set in your deployment environment.
+                  </>
+                ) : (
+                  <>
+                    <strong>User invited successfully!</strong> An invitation email has been sent with a link to set their
+                    password.
+                  </>
+                )}
+              </p>
+            )}
           </Alert>
         )}
 
@@ -146,16 +220,63 @@ export function CreateUserModal({ isOpen, onClose, isDevMode, initialEmail, init
           </Alert>
         )}
 
+        {!(success && lastResult?.temporaryPassword) && (
         <form onSubmit={handleSubmit} className="space-y-4">
-          <Input
-            label="Email Address *"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="user@example.com"
-            required
-            disabled={loading || isDevMode}
-          />
+          {!initialEmail && (
+            <div className="flex rounded-lg border border-gray-300 p-0.5 bg-gray-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMethod('email');
+                  setPhoneDigits('');
+                  setError(null);
+                }}
+                disabled={loading || isDevMode}
+                className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors disabled:opacity-50 ${
+                  authMethod === 'email'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Email invite
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMethod('phone');
+                  setError(null);
+                }}
+                disabled={loading || isDevMode}
+                className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors disabled:opacity-50 ${
+                  authMethod === 'phone'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Phone + temp password
+              </button>
+            </div>
+          )}
+
+          {authMethod === 'email' ? (
+            <Input
+              label="Email Address *"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="user@example.com"
+              required
+              disabled={loading || isDevMode}
+            />
+          ) : (
+            <PhoneInput
+              label="Phone *"
+              digits={phoneDigits}
+              onDigitsChange={setPhoneDigits}
+              disabled={loading || isDevMode}
+              name="new-user-phone"
+            />
+          )}
 
           <Input
             label="Full Name"
@@ -186,7 +307,11 @@ export function CreateUserModal({ isOpen, onClose, isDevMode, initialEmail, init
               type="submit"
               variant="primary"
               className="w-full"
-              disabled={loading || isDevMode || !email.trim()}
+              disabled={
+                loading ||
+                isDevMode ||
+                (authMethod === 'email' ? !email.trim() : !isCompleteNanpDigits(phoneDigits))
+              }
             >
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
@@ -213,9 +338,21 @@ export function CreateUserModal({ isOpen, onClose, isDevMode, initialEmail, init
 
           <div className="text-xs text-gray-600 bg-gray-50 rounded-md p-3">
             <p className="font-semibold mb-1">Note:</p>
-            <p>The new user will receive an invitation email with a link to set their password. The invitation link is valid for 24 hours.</p>
+            {authMethod === 'email' ? (
+              <p>
+                The new user will receive an invitation email with a link to set their password. The invitation link is
+                valid for 24 hours.
+              </p>
+            ) : (
+              <p>
+                No SMS provider is required. The account uses email sign-in behind the scenes with a reserved address;
+                employees sign in with <strong>Phone</strong> on the login page. A random password is generated for you
+                to share with them (in person is best).
+              </p>
+            )}
           </div>
         </form>
+        )}
       </div>
     </div>
   );

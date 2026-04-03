@@ -185,21 +185,22 @@ export async function placeOrder(formData: FormData): Promise<PlaceOrderResult> 
       
       if (orderDetails) {
         const orderNumber = orderId.slice(0, 8).toUpperCase();
+        const customerTo = user.email?.trim();
         const emailData = {
           orderId: orderId,
           orderNumber,
-          customerEmail: user.email || '',
+          customerEmail: customerTo || user.phone || '(no email on file)',
           totalPoints: orderDetails.total_points,
           itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
           deliveryMethod: orderDetails.delivery_method,
           createdAt: orderDetails.created_at,
         };
-        
-        // Send customer confirmation (don't wait)
-        sendEmail({
-          to: user.email || '',
-          ...customerOrderConfirmationEmail(emailData),
-        }).catch(err => console.error('Failed to send customer email:', err));
+        if (customerTo) {
+          sendEmail({
+            to: customerTo,
+            ...customerOrderConfirmationEmail({ ...emailData, customerEmail: customerTo }),
+          }).catch(err => console.error('Failed to send customer email:', err));
+        }
         
         // Send admin notification (don't wait)
         const adminEmails = getAdminEmails();

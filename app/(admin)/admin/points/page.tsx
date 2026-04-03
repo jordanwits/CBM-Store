@@ -149,7 +149,7 @@ export default async function AdminPointsPage({ searchParams }: AdminPointsPageP
     // Build paginated transactions query
     let transactionsQuery = supabase
       .from('points_ledger')
-      .select('id, delta_points, reason, order_id, created_at, profiles!points_ledger_user_id_fkey(email)');
+      .select('id, delta_points, reason, order_id, created_at, profiles!points_ledger_user_id_fkey(email, phone)');
     transactionsQuery = buildFilteredQuery(transactionsQuery);
     
     transactionsQuery = transactionsQuery
@@ -404,7 +404,7 @@ export default async function AdminPointsPage({ searchParams }: AdminPointsPageP
                               </p>
                               <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2 mt-0.5 gap-0.5">
                                 <p className="text-sm text-gray-500 truncate">
-                                  {entry.profiles?.email || 'Unknown user'}
+                                  {entry.profiles?.email?.trim() || entry.profiles?.phone?.trim() || 'Unknown user'}
                                 </p>
                                 <p className="text-sm text-gray-500">
                                   <FormattedDate date={entry.created_at} format="datetimeShort" />

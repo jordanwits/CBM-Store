@@ -11,7 +11,8 @@ import { declineAccessRequest } from './actions';
 
 type UserRow = {
   id: string;
-  email: string;
+  email: string | null;
+  phone: string | null;
   full_name: string | null;
   role: 'user' | 'admin';
   active: boolean;

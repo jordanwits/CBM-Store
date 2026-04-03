@@ -1,15 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { MUST_CHANGE_PASSWORD_META_KEY } from '@/lib/auth/must-change-password';
 import { Button } from 'core/components/Button';
 import { Input } from 'core/components/Input';
 import { Card, CardContent } from 'core/components/Card';
 import { Alert } from 'core/components/Alert';
 
-export default function UpdatePasswordPage() {
+function UpdatePasswordContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const requiredByPolicy = searchParams.get('required') === '1';
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -123,9 +126,9 @@ export default function UpdatePasswordPage() {
     try {
       const supabase = createClient();
       
-      // Update the user's password
       const { error: updateError } = await supabase.auth.updateUser({
-        password: password,
+        password,
+        data: { [MUST_CHANGE_PASSWORD_META_KEY]: false },
       });
 
       if (updateError) {
@@ -134,11 +137,13 @@ export default function UpdatePasswordPage() {
         return;
       }
 
+      await supabase.auth.refreshSession();
+
       setSuccess(true);
 
-      // Redirect to dashboard after 2 seconds
       setTimeout(() => {
         router.push('/dashboard');
+        router.refresh();
       }, 2000);
     } catch (err) {
       setError('An unexpected error occurred');
@@ -215,9 +220,17 @@ export default function UpdatePasswordPage() {
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Set Your Password</h1>
             <p className="text-gray-600">
-              Welcome! Please set your password to access your account.
+              {requiredByPolicy
+                ? 'Your administrator provided a temporary password. Choose a new password to continue.'
+                : 'Welcome! Please set your password to access your account.'}
             </p>
           </div>
+
+          {requiredByPolicy && sessionReady && (
+            <Alert variant="info" className="mb-6">
+              <p className="text-sm">You must complete this step before using the rest of the site.</p>
+            </Alert>
+          )}
 
           {!sessionReady && (
             <Alert variant="info" className="mb-6">
@@ -359,3 +372,20 @@ export default function UpdatePasswordPage() {
   );
 }
 
+export default function UpdatePasswordPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+          <Card className="w-full max-w-md">
+            <CardContent className="py-8">
+              <div className="text-center text-gray-600">Loading...</div>
+            </CardContent>
+          </Card>
+        </div>
+      }
+    >
+      <UpdatePasswordContent />
+    </Suspense>
+  );
+}

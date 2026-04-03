@@ -10,8 +10,13 @@ interface Transaction {
   order_id?: string | null;
   created_at: string;
   profiles?: {
-    email: string;
+    email: string | null;
+    phone: string | null;
   } | null;
+}
+
+function profileLabel(p: Transaction['profiles']) {
+  return p?.email?.trim() || p?.phone?.trim() || 'N/A';
 }
 
 interface TransactionRowProps {
@@ -26,7 +31,7 @@ export function TransactionRow({ transaction }: TransactionRowProps) {
       <tr className="group">
         <td className="px-4 py-5 text-sm text-gray-900 group-hover:bg-blue-50 transition-colors">
           <Link href={`/admin/orders/${transaction.order_id}`} className="block">
-            {transaction.profiles?.email || 'N/A'}
+            {profileLabel(transaction.profiles)}
           </Link>
         </td>
         <td className="px-4 py-5 text-sm group-hover:bg-blue-50 transition-colors">
@@ -74,7 +79,7 @@ export function TransactionRow({ transaction }: TransactionRowProps) {
   return (
     <tr>
       <td className="px-4 py-5 text-sm text-gray-900">
-        {transaction.profiles?.email || 'N/A'}
+        {profileLabel(transaction.profiles)}
       </td>
       <td className="px-4 py-5 text-sm">
         <span

@@ -68,16 +68,18 @@ export async function updateOrderStatus(data: UpdateOrderStatusData) {
     // Get order details with user email
     const { data: orderDetails } = await supabase
       .from('orders')
-      .select('*, profiles(email)')
+      .select('*, profiles(email, phone)')
       .eq('id', data.orderId)
       .single();
     
-    if (orderDetails && (orderDetails as any).profiles?.email) {
+    const customerEmail = (orderDetails as any)?.profiles?.email?.trim();
+    const customerPhone = (orderDetails as any)?.profiles?.phone?.trim();
+    if (orderDetails) {
       const orderNumber = data.orderId.slice(0, 8).toUpperCase();
       const emailData = {
         orderId: data.orderId,
         orderNumber,
-        customerEmail: (orderDetails as any).profiles.email,
+        customerEmail: customerEmail || customerPhone || '(no email on file)',
         totalPoints: orderDetails.total_points,
         itemCount: 0, // Not critical for status update
         deliveryMethod: orderDetails.delivery_method,
@@ -85,14 +87,14 @@ export async function updateOrderStatus(data: UpdateOrderStatusData) {
         status: data.status,
         trackingNumber: data.trackingNumber,
       };
-      
-      // Send customer notification (don't wait)
-      sendEmail({
-        to: (orderDetails as any).profiles.email,
-        ...customerOrderStatusEmail(emailData),
-      }).catch(err => console.error('Failed to send customer status email:', err));
-      
-      // Send admin notification (don't wait)
+
+      if (customerEmail) {
+        sendEmail({
+          to: customerEmail,
+          ...customerOrderStatusEmail(emailData),
+        }).catch(err => console.error('Failed to send customer status email:', err));
+      }
+
       const adminEmails = getAdminEmails();
       if (adminEmails.length > 0) {
         sendEmail({

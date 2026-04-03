@@ -7,17 +7,27 @@ import { Button } from 'core/components/Button';
 import { Input } from 'core/components/Input';
 import { Alert } from 'core/components/Alert';
 import { FormattedDate } from 'core/components/FormattedDate';
+import { formatStoredPhoneForDisplay } from 'core/lib/phone-format';
 import { setUserActive, updateUserProfile, deleteUser } from './actions';
 
 type UserRow = {
   id: string;
-  email: string;
+  email: string | null;
+  phone: string | null;
   full_name: string | null;
   role: 'user' | 'admin';
   active: boolean;
   created_at: string;
   points_balance: number;
 };
+
+function loginIdentifier(u: UserRow): string {
+  const e = u.email?.trim();
+  if (e) return e;
+  const p = u.phone?.trim();
+  if (p) return p;
+  return `${u.id.slice(0, 8)}…`;
+}
 
 function UserRowActions({
   user,
@@ -170,11 +180,15 @@ export function UsersTableClient({
     let filtered = users;
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      filtered = users.filter(
-        (u) =>
-          u.email.toLowerCase().includes(query) ||
-          u.full_name?.toLowerCase().includes(query)
-      );
+      filtered = users.filter((u) => {
+        const idStr = loginIdentifier(u).toLowerCase();
+        return (
+          idStr.includes(query) ||
+          (u.email?.toLowerCase().includes(query) ?? false) ||
+          (u.phone?.toLowerCase().includes(query) ?? false) ||
+          (u.full_name?.toLowerCase().includes(query) ?? false)
+        );
+      });
     }
 
     // Keep consistent ordering; show current admin at top for clarity
@@ -235,7 +249,7 @@ export function UsersTableClient({
     if (!u.active) {
       // activating is safe
     } else {
-      const ok = confirm(`Deactivate ${u.email}? They will not be able to log in.`);
+      const ok = confirm(`Deactivate ${loginIdentifier(u)}? They will not be able to log in.`);
       if (!ok) return;
     }
 
@@ -259,7 +273,7 @@ export function UsersTableClient({
     setMessage(null);
 
     const ok = confirm(
-      `Are you sure you want to permanently delete ${u.email}?\n\nThis action cannot be undone. All user data will be removed.`
+      `Are you sure you want to permanently delete ${loginIdentifier(u)}?\n\nThis action cannot be undone. All user data will be removed.`
     );
     if (!ok) return;
 
@@ -296,7 +310,7 @@ export function UsersTableClient({
         <div className="w-full sm:w-96">
           <Input
             type="search"
-            placeholder="Search by email or name..."
+            placeholder="Search by email, phone, or name..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full"
@@ -339,7 +353,18 @@ export function UsersTableClient({
             return (
               <div className="p-4 rounded-lg border border-gray-200 bg-white" key={u.id}>
                 <div className="flex justify-between items-start gap-2 mb-2">
-                  <p className="text-sm font-medium text-gray-900 truncate">{u.email}</p>
+                  <div className="text-sm font-medium text-gray-900 truncate">
+                    <span className="block truncate">
+                      {u.email?.trim() ||
+                        (u.phone ? formatStoredPhoneForDisplay(u.phone) : '') ||
+                        '—'}
+                    </span>
+                    {u.email?.trim() && u.phone?.trim() && (
+                      <span className="block text-xs font-normal text-gray-500 truncate">
+                        {formatStoredPhoneForDisplay(u.phone)}
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {isSelf && (
                       <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-900">
@@ -448,7 +473,7 @@ export function UsersTableClient({
             <thead>
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider bg-gray-50">
-                  Email
+                  Email / phone
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider bg-gray-50">
                   Full Name
@@ -482,7 +507,18 @@ export function UsersTableClient({
                   <tr key={u.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">
                       <div className="flex items-center gap-2">
-                        <span>{u.email}</span>
+                        <span className="min-w-0">
+                          <span className="block">
+                            {u.email?.trim() ||
+                              (u.phone ? formatStoredPhoneForDisplay(u.phone) : '') ||
+                              '—'}
+                          </span>
+                          {u.email?.trim() && u.phone?.trim() && (
+                            <span className="block text-xs font-normal text-gray-600">
+                              {formatStoredPhoneForDisplay(u.phone)}
+                            </span>
+                          )}
+                        </span>
                         {isSelf && (
                           <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-900">
                             You

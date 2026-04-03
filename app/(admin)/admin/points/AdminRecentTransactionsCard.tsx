@@ -64,7 +64,7 @@ export async function AdminRecentTransactionsCard({ isDevMode }: AdminRecentTran
         .gte('created_at', cutoffISO),
       supabase
         .from('points_ledger')
-        .select('id, reason, delta_points, created_at, profiles!points_ledger_user_id_fkey(email)')
+        .select('id, reason, delta_points, created_at, profiles!points_ledger_user_id_fkey(email, phone)')
         .gte('created_at', cutoffISO)
         .order('created_at', { ascending: false })
         .limit(10), // Show up to 10 most recent transactions
@@ -114,7 +114,7 @@ export async function AdminRecentTransactionsCard({ isDevMode }: AdminRecentTran
                       <p className="font-semibold text-gray-900 truncate">{entry.reason}</p>
                       <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2 mt-0.5 gap-0.5">
                         <p className="text-sm text-gray-500 truncate">
-                          {entry.profiles?.email || 'Unknown user'}
+                          {entry.profiles?.email?.trim() || entry.profiles?.phone?.trim() || 'Unknown user'}
                         </p>
                         <p className="text-sm text-gray-500">
                           <FormattedDate date={entry.created_at} format="datetimeShort" />

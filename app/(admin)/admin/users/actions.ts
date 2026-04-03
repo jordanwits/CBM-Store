@@ -1,6 +1,13 @@
 'use server';
 
+import { randomBytes } from 'crypto';
 import { requireAdmin } from '@/lib/auth/require-admin';
+import {
+  normalizeE164Phone,
+  syntheticEmailFromNormalizedPhone,
+  isReservedPhoneLoginEmail,
+} from '@/lib/auth/phone';
+import { MUST_CHANGE_PASSWORD_META_KEY } from '@/lib/auth/must-change-password';
 import { revalidatePath } from 'next/cache';
 import { sendEmail, getSiteUrl } from '@/lib/email/resend';
 
@@ -13,6 +20,8 @@ export interface UpdateUserProfileResult {
   emailSent?: boolean;
   /** Error message when email failed (not when skipped). */
   emailError?: string;
+  /** One-time temp password for phone-based onboarding (show to admin only). */
+  temporaryPassword?: string;
 }
 
 function isDevMode() {
@@ -226,7 +235,9 @@ export async function declineAccessRequest(input: {
 }
 
 export async function createUser(input: {
-  email: string;
+  authMethod?: 'email' | 'phone';
+  email?: string;
+  phone?: string;
   fullName?: string;
   role?: UserRole;
 }): Promise<UpdateUserProfileResult> {
@@ -234,22 +245,89 @@ export async function createUser(input: {
     return { success: false, error: 'User creation requires Supabase to be configured.' };
   }
 
+  const method = input.authMethod ?? 'email';
+  const { supabase, user: currentAdmin } = await requireAdmin();
+
+  if (method === 'phone') {
+    const normalizedPhone = normalizeE164Phone(input.phone || '');
+    if (!normalizedPhone) {
+      return {
+        success: false,
+        error: 'Enter a valid 10-digit US phone number (optional leading 1 for country code).',
+      };
+    }
+
+    const temporaryPassword = randomBytes(18).toString('base64url');
+    const syntheticEmail = syntheticEmailFromNormalizedPhone(normalizedPhone);
+
+    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      email: syntheticEmail,
+      password: temporaryPassword,
+      email_confirm: true,
+      user_metadata: {
+        full_name: input.fullName?.trim() || null,
+        phone_e164: normalizedPhone,
+        [MUST_CHANGE_PASSWORD_META_KEY]: true,
+      },
+    });
+
+    if (authError) {
+      console.error('Error creating phone user:', authError);
+      const msg = authError.message || '';
+      if (
+        msg.toLowerCase().includes('already') ||
+        msg.toLowerCase().includes('registered') ||
+        msg.toLowerCase().includes('exists')
+      ) {
+        return { success: false, error: 'A user with this phone number already exists' };
+      }
+      return { success: false, error: authError.message || 'Failed to create user' };
+    }
+
+    if (!authData.user) {
+      return { success: false, error: 'Failed to create user' };
+    }
+
+    if (input.role && input.role !== 'user') {
+      const { error: roleError } = await supabase
+        .from('profiles')
+        .update({ role: input.role })
+        .eq('id', authData.user.id);
+
+      if (roleError) {
+        console.error('Error setting user role:', roleError);
+      }
+    }
+
+    revalidatePath('/admin/users');
+    revalidatePath('/admin');
+
+    return {
+      success: true,
+      emailSent: false,
+      temporaryPassword,
+    };
+  }
+
   if (!input?.email) {
     return { success: false, error: 'Email is required' };
   }
 
-  // Validate email format
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(input.email)) {
     return { success: false, error: 'Invalid email address' };
   }
 
-  const { supabase, user: currentAdmin } = await requireAdmin();
+  if (isReservedPhoneLoginEmail(input.email)) {
+    return {
+      success: false,
+      error: 'This email domain is reserved for phone-based accounts. Use “Phone + temp password” instead.',
+    };
+  }
 
-  // Create the user first (unconfirmed, they'll confirm via the invite link)
   const { data: authData, error: authError } = await supabase.auth.admin.createUser({
     email: input.email.trim(),
-    email_confirm: false, // Don't confirm - they'll confirm via invite link
+    email_confirm: false,
     user_metadata: {
       full_name: input.fullName?.trim() || null,
     },
@@ -267,10 +345,9 @@ export async function createUser(input: {
     return { success: false, error: 'Failed to create user' };
   }
 
-  // Generate invite link for the newly created user
   const siteUrl = getSiteUrl();
   const redirectTo = `${siteUrl}/update-password`;
-  
+
   const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
     type: 'invite',
     email: input.email.trim(),
@@ -282,7 +359,6 @@ export async function createUser(input: {
   if (linkError) {
     console.error('Error generating invite link:', linkError);
     console.error('Link error details:', JSON.stringify(linkError, null, 2));
-    // If link generation fails, try to delete the user and return error
     await supabase.auth.admin.deleteUser(authData.user.id);
     return { success: false, error: `Failed to generate invite link: ${linkError.message || 'Please try again.'}` };
   }
@@ -293,7 +369,6 @@ export async function createUser(input: {
     return { success: false, error: 'Failed to generate invite link. Please try again.' };
   }
 
-  // Send invite email via Resend (using verified domain)
   const inviteLink = linkData.properties.action_link;
   const emailResult = await sendInviteEmail({
     email: input.email.trim(),
@@ -310,7 +385,6 @@ export async function createUser(input: {
     });
   }
 
-  // Update the profile role if specified (default is 'user' from schema)
   if (input.role && input.role !== 'user') {
     const { error: roleError } = await supabase
       .from('profiles')
@@ -319,11 +393,9 @@ export async function createUser(input: {
 
     if (roleError) {
       console.error('Error setting user role:', roleError);
-      // Don't fail the whole operation, just log it
     }
   }
 
-  // Mark any pending access request for this email as approved
   const trimmedEmail = input.email.trim().toLowerCase();
   const { error: requestError } = await supabase
     .from('access_requests')
@@ -337,7 +409,6 @@ export async function createUser(input: {
 
   if (requestError) {
     console.error('Error updating access request status:', requestError);
-    // Don't fail the whole operation, just log it
   }
 
   revalidatePath('/admin/users');
