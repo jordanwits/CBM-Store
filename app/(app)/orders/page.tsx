@@ -40,25 +40,19 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
         id: 'mock-order-1',
         total_points: 10000,
         status: 'processing',
-        delivery_method: 'delivery',
         created_at: new Date(Date.now() - 2 * 86400000).toISOString(),
-        ship_name: 'Demo User',
       },
       {
         id: 'mock-order-2',
         total_points: 2500,
         status: 'new',
-        delivery_method: 'pickup',
         created_at: new Date(Date.now() - 7 * 86400000).toISOString(),
-        ship_name: null,
       },
       {
         id: 'mock-order-3',
         total_points: 1500,
         status: 'shipped',
-        delivery_method: 'delivery',
         created_at: new Date(Date.now() - 14 * 86400000).toISOString(),
-        ship_name: 'Demo User',
       },
     ];
     totalCount = 3;
@@ -85,7 +79,7 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
         .gte('created_at', cutoffISO),
       supabase
         .from('orders')
-        .select('id, total_points, status, delivery_method, created_at, ship_name')
+        .select('id, total_points, status, created_at')
         .eq('user_id', userId)
         .gte('created_at', cutoffISO)
         .order('created_at', { ascending: false })
@@ -152,22 +146,11 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
                           Placed <FormattedDate date={order.created_at} format="dateLong" />
                         </div>
                         <div className="flex items-center gap-2">
-                          {order.delivery_method === 'delivery' ? (
-                            <>
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-                              </svg>
-                              <span>Shipping to: {order.ship_name}</span>
-                            </>
-                          ) : (
-                            <>
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                              </svg>
-                              <span>Pickup</span>
-                            </>
-                          )}
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          <span>Store pickup</span>
                         </div>
                       </div>
                     </div>

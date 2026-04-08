@@ -204,8 +204,8 @@ export default function MarketingHomePage() {
                 </div>
               </div>
               <div>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">Flexible Delivery</h3>
-                <p className="text-gray-600">Choose delivery or pickup options that work best for your schedule and location.</p>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">Easy Pickup</h3>
+                <p className="text-gray-600">Redeem points and pick up your items at our location when they are ready.</p>
               </div>
             </div>
           </div>

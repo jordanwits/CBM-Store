@@ -50,10 +50,7 @@ export default function ProductPageClient({
             <span className="text-lg text-gray-600">points</span>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary">In Stock</Badge>
-            <span className="text-sm text-gray-600">• Usually ships within 3-5 business days</span>
-          </div>
+          <Badge variant="secondary">In Stock</Badge>
         </div>
 
         <Card className="mb-6">

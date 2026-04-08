@@ -81,8 +81,7 @@ export async function updateOrderStatus(data: UpdateOrderStatusData) {
         orderNumber,
         customerEmail: customerEmail || customerPhone || '(no email on file)',
         totalPoints: orderDetails.total_points,
-        itemCount: 0, // Not critical for status update
-        deliveryMethod: orderDetails.delivery_method,
+        itemCount: 0,
         createdAt: orderDetails.created_at,
         status: data.status,
         trackingNumber: data.trackingNumber,

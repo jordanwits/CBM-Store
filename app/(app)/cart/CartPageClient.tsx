@@ -282,10 +282,6 @@ export default function CartPageClient({ isDevMode }: CartPageClientProps) {
                   <span className="text-gray-600">Items ({totalItems})</span>
                   <span className="font-medium text-gray-900">{totalPoints.toLocaleString()} pts</span>
                 </div>
-                <div className="flex justify-between text-base">
-                  <span className="text-gray-600">Shipping</span>
-                  <span className="font-medium text-green-600">FREE</span>
-                </div>
               </div>
               
               <div className="border-t pt-4">

@@ -171,20 +171,7 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
                       <p className="text-sm text-gray-900 truncate">
                         {order.profiles?.email?.trim() || order.profiles?.phone?.trim() || 'N/A'}
                       </p>
-                      <div className="flex flex-wrap gap-x-2 gap-y-1 mt-2 text-sm text-gray-600">
-                        <span
-                          className={`px-2 py-0.5 rounded text-xs font-medium ${
-                            order.delivery_method === 'pickup'
-                              ? 'bg-blue-100 text-blue-900'
-                              : 'bg-gray-100 text-gray-900'
-                          }`}
-                        >
-                          {order.delivery_method === 'pickup' ? 'Pickup' : 'Delivery'}
-                        </span>
-                        <span className="text-gray-500">
-                          {order.delivery_method === 'pickup' ? '—' : (order.ship_name || 'N/A')}
-                        </span>
-                      </div>
+                      <p className="text-xs text-gray-500 mt-2">Store pickup</p>
                       <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-100">
                         <span className="text-sm font-semibold text-gray-900">{order.total_points} pts</span>
                         <span className="text-sm text-gray-600"><FormattedDate date={order.created_at} format="date" /></span>
@@ -210,12 +197,6 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
                       Customer
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider bg-gray-50">
-                      Delivery Method
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider bg-gray-50">
-                      Ship To
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider bg-gray-50">
                       Points
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider bg-gray-50">
@@ -239,24 +220,6 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-900">
                         {order.profiles?.email?.trim() || order.profiles?.phone?.trim() || 'N/A'}
-                      </td>
-                      <td className="px-4 py-3 text-sm">
-                        <span
-                          className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            order.delivery_method === 'pickup'
-                              ? 'bg-blue-100 text-blue-900'
-                              : 'bg-gray-100 text-gray-900'
-                          }`}
-                        >
-                          {order.delivery_method === 'pickup' ? 'Pickup' : 'Delivery'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-900">
-                        {order.delivery_method === 'pickup' ? (
-                          <span className="text-gray-500 italic">N/A</span>
-                        ) : (
-                          order.ship_name || 'N/A'
-                        )}
                       </td>
                       <td className="px-4 py-3 text-sm font-semibold text-gray-900">{order.total_points}</td>
                       <td className="px-4 py-3 text-sm">

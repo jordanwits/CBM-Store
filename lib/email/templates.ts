@@ -8,7 +8,6 @@ interface OrderData {
   customerName?: string;
   totalPoints: number;
   itemCount: number;
-  deliveryMethod: string;
   createdAt: string;
 }
 
@@ -57,8 +56,8 @@ export function customerOrderConfirmationEmail(order: OrderData) {
         <td style="padding: 8px 0; border-bottom: 1px solid #f3f4f6; text-align: right;">${order.itemCount}</td>
       </tr>
       <tr>
-        <td style="padding: 8px 0;"><strong>Delivery Method:</strong></td>
-        <td style="padding: 8px 0; text-align: right;">${order.deliveryMethod === 'pickup' ? 'Pickup' : 'Delivery'}</td>
+        <td style="padding: 8px 0;"><strong>Fulfillment:</strong></td>
+        <td style="padding: 8px 0; text-align: right;">Store pickup</td>
       </tr>
     </table>
   </div>
@@ -69,9 +68,7 @@ export function customerOrderConfirmationEmail(order: OrderData) {
   
   <div style="background-color: #f8f9fa; border-radius: 8px; padding: 20px; margin-top: 20px;">
     <p style="margin: 0; font-size: 14px; color: #666;">
-      ${order.deliveryMethod === 'pickup' 
-        ? 'You will be notified when your order is ready for pickup.' 
-        : 'You will receive shipping updates as your order is processed.'}
+      Orders are fulfilled as store pickup at our location.
     </p>
   </div>
   
@@ -131,8 +128,8 @@ export function adminNewOrderEmail(order: OrderData) {
         <td style="padding: 8px 0; border-bottom: 1px solid #f3f4f6; text-align: right;">${order.itemCount}</td>
       </tr>
       <tr>
-        <td style="padding: 8px 0;"><strong>Delivery Method:</strong></td>
-        <td style="padding: 8px 0; text-align: right; text-transform: capitalize;">${order.deliveryMethod}</td>
+        <td style="padding: 8px 0;"><strong>Fulfillment:</strong></td>
+        <td style="padding: 8px 0; text-align: right;">Store pickup</td>
       </tr>
     </table>
   </div>
@@ -155,11 +152,11 @@ export function customerOrderStatusEmail(order: OrderStatusData) {
   const subject = `Order ${statusText} - #${order.orderNumber}`;
   
   const statusMessages: Record<string, string> = {
-    processing: 'Your order is now being processed and prepared for shipment.',
-    shipped: order.trackingNumber 
-      ? `Your order has been shipped! Tracking number: ${order.trackingNumber}`
-      : 'Your order has been shipped and is on its way to you.',
-    delivered: 'Your order has been delivered. We hope you enjoy your items!',
+    processing: 'Your order is being prepared.',
+    shipped: order.trackingNumber
+      ? `Update: reference ${order.trackingNumber}. See your order page for details.`
+      : 'Your order has an update. Please check your order page for pickup details.',
+    delivered: 'Your order is complete. Thank you!',
     cancelled: 'Your order has been cancelled. If you have questions, please contact support.',
   };
   
@@ -186,7 +183,7 @@ export function customerOrderStatusEmail(order: OrderStatusData) {
         <p style="margin: 0;">
           <a href="${getTrackingUrl(order.trackingNumber)}" style="font-family: monospace; font-size: 16px; font-weight: bold; color: #2563eb; text-decoration: underline;">${order.trackingNumber}</a>
         </p>
-        <p style="margin: 5px 0 0 0; font-size: 12px; color: #666;">Click the tracking number to track your package</p>
+        <p style="margin: 5px 0 0 0; font-size: 12px; color: #666;">Open the link for carrier tracking if applicable</p>
       </div>
     ` : ''}
   </div>

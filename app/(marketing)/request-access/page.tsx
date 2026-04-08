@@ -11,6 +11,7 @@ export default function RequestAccessPage() {
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
   const [message, setMessage] = useState('');
+  const [websiteHoneypot, setWebsiteHoneypot] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
@@ -27,6 +28,7 @@ export default function RequestAccessPage() {
         email,
         fullName,
         message: message || undefined,
+        website: websiteHoneypot,
       });
 
       if (result.success) {
@@ -35,6 +37,7 @@ export default function RequestAccessPage() {
         setEmail('');
         setFullName('');
         setMessage('');
+        setWebsiteHoneypot('');
         
         // Redirect to home after 3 seconds
         setTimeout(() => {
@@ -76,6 +79,23 @@ export default function RequestAccessPage() {
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
+                {/* Honeypot: visible only to simple bots; off-screen, not keyboard-focusable */}
+                <div
+                  className="absolute -left-[9999px] h-0 w-0 overflow-hidden"
+                  aria-hidden="true"
+                >
+                  <label htmlFor="request-access-website-hp">Website</label>
+                  <input
+                    id="request-access-website-hp"
+                    type="text"
+                    name="website"
+                    tabIndex={-1}
+                    autoComplete="off"
+                    value={websiteHoneypot}
+                    onChange={(e) => setWebsiteHoneypot(e.target.value)}
+                    disabled={loading}
+                  />
+                </div>
                 <Input
                   label="Work Email"
                   type="email"

@@ -32,15 +32,7 @@ export default async function OrderDetailPage({
       id: 'mock-order-1',
       total_points: 10000,
       status: 'processing',
-      delivery_method: 'delivery', // 'pickup' or 'delivery'
       created_at: new Date(Date.now() - 2 * 86400000).toISOString(),
-      ship_name: 'Demo User',
-      ship_address_line1: '123 Main St',
-      ship_address_line2: 'Apt 4',
-      ship_city: 'Springfield',
-      ship_state: 'IL',
-      ship_zip: '62701',
-      ship_country: 'United States',
       notes: null,
     };
     items = [
@@ -88,7 +80,7 @@ export default async function OrderDetailPage({
     const [orderResult, itemsResult] = await Promise.all([
       supabase
         .from('orders')
-        .select('id, user_id, status, total_points, delivery_method, ship_name, ship_address_line1, ship_address_line2, ship_city, ship_state, ship_zip, ship_country, tracking_number, notes, created_at')
+        .select('id, user_id, status, total_points, tracking_number, notes, created_at')
         .eq('id', id)
         .eq('user_id', userId)
         .single(),
@@ -182,34 +174,18 @@ export default async function OrderDetailPage({
             </div>
 
             <div className="pt-6 border-t">
-              <p className="text-sm font-medium text-gray-500 mb-3">Delivery Method</p>
+              <p className="text-sm font-medium text-gray-500 mb-3">Fulfillment</p>
               <div className="flex items-center gap-3">
-                {order.delivery_method === 'delivery' ? (
-                  <>
-                    <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
-                      <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-                      </svg>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-900">Delivery</p>
-                      <p className="text-sm text-gray-600">Will be processed and shipped to your address</p>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
-                      <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-900">Pickup</p>
-                      <p className="text-sm text-gray-600">You will pick up at our location</p>
-                    </div>
-                  </>
-                )}
+                <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
+                  <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="font-semibold text-gray-900">Store pickup</p>
+                  <p className="text-sm text-gray-600">Pick up at our location when your order is prepared.</p>
+                </div>
               </div>
             </div>
 
@@ -227,60 +203,26 @@ export default async function OrderDetailPage({
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                   </svg>
                 </Link>
-                <p className="text-xs text-gray-500 mt-1">Click to track your package</p>
+                <p className="text-xs text-gray-500 mt-1">Open link for tracking details if provided</p>
               </div>
             )}
           </CardContent>
         </Card>
 
-        {/* Shipping Address Card - Only show for delivery */}
-        {order.delivery_method === 'delivery' && order.ship_name && (
-          <Card>
-            <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 border-b">
-              <h2 className="text-xl font-bold flex items-center gap-2 text-gray-900">
-                <svg className="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                Shipping Address
-              </h2>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-1.5">
-                <p className="font-semibold text-gray-900 text-base">{order.ship_name}</p>
-                <p className="text-sm text-gray-700">{order.ship_address_line1}</p>
-                {order.ship_address_line2 && (
-                  <p className="text-sm text-gray-700">{order.ship_address_line2}</p>
-                )}
-                <p className="text-sm text-gray-700">
-                  {order.ship_city}, {order.ship_state} {order.ship_zip}
-                </p>
-                <p className="text-sm text-gray-700 font-medium">{order.ship_country}</p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Pickup Information Card - Only show for pickup */}
-        {order.delivery_method === 'pickup' && (
-          <Card>
-            <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 border-b">
-              <h2 className="text-xl font-bold flex items-center gap-2 text-gray-900">
-                <svg className="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                Pickup Information
-              </h2>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-1.5">
-                <p className="text-gray-800">Your order will be available for pickup at our location.</p>
-                <p className="text-sm text-gray-600 mt-2">You will be notified when your order is ready for pickup.</p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        <Card>
+          <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 border-b">
+            <h2 className="text-xl font-bold flex items-center gap-2 text-gray-900">
+              <svg className="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              Pickup
+            </h2>
+          </CardHeader>
+          <CardContent>
+            <p className="text-gray-800">Your order will be available for pickup at our location.</p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Order Items */}
@@ -418,7 +360,7 @@ export default async function OrderDetailPage({
             </div>
             <h3 className="text-2xl font-bold text-gray-900 mb-2">Need Help with Your Order?</h3>
             <p className="text-gray-600 mb-6">
-              Our support team is here to assist you with any questions about your order, shipping, or tracking information.
+              Our support team is here to help with any questions about your order or pickup.
             </p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <ContactSupportButton />

@@ -26,6 +26,31 @@ interface SearchParams {
   sort?: 'featured' | 'newest' | 'priceAsc' | 'priceDesc' | 'nameAsc';
 }
 
+/** Matches the "Just In" badge: products in the New Arrivals collection */
+const JUST_IN_COLLECTION = 'New Arrivals';
+
+function hasActiveCollectionFilter(collections?: string | string[]): boolean {
+  if (!collections) return false;
+  if (Array.isArray(collections)) return collections.length > 0;
+  return true;
+}
+
+function isFeaturedSort(sort: SearchParams['sort']): boolean {
+  return !sort || sort === 'featured';
+}
+
+/** Just In / New Arrivals first, then name A–Z (Featured storefront order) */
+function sortFeaturedJustInFirst<T extends { name?: string; collections?: string[] | null }>(
+  items: T[]
+): T[] {
+  return [...items].sort((a, b) => {
+    const aJustIn = a.collections?.includes(JUST_IN_COLLECTION) ? 0 : 1;
+    const bJustIn = b.collections?.includes(JUST_IN_COLLECTION) ? 0 : 1;
+    if (aJustIn !== bJustIn) return aJustIn - bJustIn;
+    return (a.name ?? '').localeCompare(b.name ?? '');
+  });
+}
+
 export default async function DashboardPage({
   searchParams,
 }: {
@@ -177,7 +202,11 @@ export default async function DashboardPage({
       // Mock newest by reversing
       products.reverse();
     }
-    
+
+    if (!hasActiveCollectionFilter(params.collections) && isFeaturedSort(params.sort)) {
+      products = sortFeaturedJustInFirst(products);
+    }
+
     // Extract filter options
     allCategories = [...new Set(mockProducts.map(p => p.category).filter((c): c is string => Boolean(c)))];
     allCollections = [...new Set(mockProducts.flatMap(p => p.collections || []))];
@@ -297,8 +326,12 @@ export default async function DashboardPage({
       filteredProducts = filteredProducts.filter(p => productIds.has(p.id));
     }
 
+    if (!hasActiveCollectionFilter(params.collections) && isFeaturedSort(params.sort)) {
+      filteredProducts = sortFeaturedJustInFirst(filteredProducts);
+    }
+
     products = filteredProducts;
-    
+
     // Filter metadata already loaded in parallel at the start
   }
 
@@ -448,7 +481,8 @@ export default async function DashboardPage({
             {products.map((product) => {
               const pointsPrice = Math.round(product.base_usd * conversionRate);
               const isNew = product.collections?.includes('New Arrivals');
-              
+              const isCustomOrder = product.collections?.includes('Custom Order');
+
               return (
                 <Link key={product.id} href={`/product/${product.id}`} className="group">
                   <div className="relative border-2 border-transparent hover:border-secondary/40 rounded-lg p-2 transition-all duration-200">
@@ -472,11 +506,21 @@ export default async function DashboardPage({
                     
                     {/* Product Info */}
                     <div className="space-y-2">
-                      {/* Just In Badge */}
-                      {isNew && (
-                        <span className="inline-block px-2 py-1 text-xs font-bold text-secondary-foreground bg-secondary rounded uppercase tracking-wide">Just In</span>
+                      {(isNew || isCustomOrder) && (
+                        <div className="flex flex-wrap gap-2">
+                          {isNew && (
+                            <span className="inline-block px-2 py-1 text-xs font-bold text-secondary-foreground bg-secondary rounded uppercase tracking-wide">
+                              Just In
+                            </span>
+                          )}
+                          {isCustomOrder && (
+                            <span className="inline-block px-2 py-1 text-xs font-bold text-secondary-foreground bg-secondary rounded uppercase tracking-wide">
+                              Custom Order
+                            </span>
+                          )}
+                        </div>
                       )}
-                      
+
                       {/* Product Name */}
                       <h3 className="text-base font-semibold text-gray-900 line-clamp-2 group-hover:underline">
                         {product.name}

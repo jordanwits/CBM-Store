@@ -20,8 +20,18 @@ export async function submitAccessRequest(input: {
   email: string;
   fullName: string;
   message?: string;
+  website?: string;
 }): Promise<RequestAccessResult> {
   try {
+    if (input.website?.trim()) {
+      console.log('[Access Request] Honeypot filled; discarding');
+      return {
+        success: true,
+        message:
+          'Access request submitted successfully. You will receive an email once your request is approved.',
+      };
+    }
+
     console.log('[Access Request] Received request:', { email: input?.email, fullName: input?.fullName });
     
     // Validate input

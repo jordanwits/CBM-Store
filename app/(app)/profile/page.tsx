@@ -22,12 +22,6 @@ export default async function ProfilePage() {
       active: true,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      address_line1: '123 Main St',
-      address_line2: 'Apt 4B',
-      city: 'New York',
-      state: 'NY',
-      zip: '10001',
-      country: 'US',
     };
   } else {
     profile = await getUserProfile();
@@ -40,7 +34,7 @@ export default async function ProfilePage() {
     <div className="pb-8">
       <PageHeader 
         title="My Profile" 
-        subtitle="Manage your personal information and shipping address"
+        subtitle="Manage your personal information"
       />
       <ProfilePageClient 
         isDevMode={isDevMode}

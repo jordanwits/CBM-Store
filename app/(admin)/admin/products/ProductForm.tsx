@@ -50,6 +50,7 @@ export function ProductForm({ mode, productId, initialData, isDevMode }: Product
 
   const availableCollections = [
     'New Arrivals',
+    'Custom Order',
     'Essentials',
     'Eco-Friendly',
     'Premium',

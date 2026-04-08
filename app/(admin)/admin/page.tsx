@@ -156,15 +156,6 @@ export default async function AdminDashboardPage() {
                       {order.profiles?.email?.trim() || order.profiles?.phone?.trim() || 'N/A'}
                     </p>
                     <div className="flex flex-wrap gap-2 text-sm">
-                      <span
-                        className={`px-2 py-0.5 rounded text-xs font-medium ${
-                          order.delivery_method === 'pickup'
-                            ? 'bg-blue-100 text-blue-900'
-                            : 'bg-gray-100 text-gray-900'
-                        }`}
-                      >
-                        {order.delivery_method === 'pickup' ? 'Pickup' : 'Delivery'}
-                      </span>
                       <span className="font-semibold text-gray-900">{order.total_points} pts</span>
                       <span className="text-gray-500"><FormattedDate date={order.created_at} format="date" /></span>
                     </div>
@@ -183,9 +174,6 @@ export default async function AdminDashboardPage() {
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider bg-gray-50">
                       Customer
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider bg-gray-50">
-                      Delivery Method
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider bg-gray-50">
                       Points
@@ -211,17 +199,6 @@ export default async function AdminDashboardPage() {
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-900">
                         {order.profiles?.email?.trim() || order.profiles?.phone?.trim() || 'N/A'}
-                      </td>
-                      <td className="px-4 py-3 text-sm">
-                        <span
-                          className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            order.delivery_method === 'pickup'
-                              ? 'bg-blue-100 text-blue-900'
-                              : 'bg-gray-100 text-gray-900'
-                          }`}
-                        >
-                          {order.delivery_method === 'pickup' ? 'Pickup' : 'Delivery'}
-                        </span>
                       </td>
                       <td className="px-4 py-3 text-sm font-semibold text-gray-900">{order.total_points}</td>
                       <td className="px-4 py-3 text-sm">

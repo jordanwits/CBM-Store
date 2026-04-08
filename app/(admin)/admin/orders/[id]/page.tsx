@@ -109,15 +109,9 @@ export default async function AdminOrderDetailPage({
           <CardContent>
             <div className="space-y-2">
               <div>
-                <p className="text-sm text-gray-700 font-medium">Delivery Method</p>
-                <span
-                  className={`inline-block mt-1 px-3 py-1 rounded-full text-sm font-medium ${
-                    order.delivery_method === 'pickup'
-                      ? 'bg-blue-100 text-blue-900'
-                      : 'bg-gray-100 text-gray-900'
-                  }`}
-                >
-                  {order.delivery_method === 'pickup' ? 'Pickup' : 'Delivery'}
+                <p className="text-sm text-gray-700 font-medium">Fulfillment</p>
+                <span className="inline-block mt-1 px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-900">
+                  Store pickup
                 </span>
               </div>
               <div>
@@ -161,42 +155,14 @@ export default async function AdminOrderDetailPage({
         </Card>
       </div>
 
-      {order.delivery_method === 'delivery' && (
-        <Card className="mb-6">
-          <CardHeader>
-            <h2 className="text-lg font-semibold text-gray-900">Shipping Address</h2>
-          </CardHeader>
-          <CardContent>
-            {order.ship_name ? (
-              <>
-                <p className="font-medium text-gray-900">{order.ship_name}</p>
-                <p className="text-sm text-gray-800 mt-1">{order.ship_address_line1}</p>
-                {order.ship_address_line2 && (
-                  <p className="text-sm text-gray-800">{order.ship_address_line2}</p>
-                )}
-                <p className="text-sm text-gray-800">
-                  {order.ship_city}, {order.ship_state} {order.ship_zip}
-                </p>
-                <p className="text-sm text-gray-800">{order.ship_country}</p>
-              </>
-            ) : (
-              <p className="text-gray-600">No shipping address provided</p>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {order.delivery_method === 'pickup' && (
-        <Card className="mb-6">
-          <CardHeader>
-            <h2 className="text-lg font-semibold text-gray-900">Pickup Information</h2>
-          </CardHeader>
-          <CardContent>
-            <p className="text-gray-800">This order will be picked up at our location.</p>
-            <p className="text-sm text-gray-600 mt-2">Customer will be notified when the order is ready for pickup.</p>
-          </CardContent>
-        </Card>
-      )}
+      <Card className="mb-6">
+        <CardHeader>
+          <h2 className="text-lg font-semibold text-gray-900">Pickup</h2>
+        </CardHeader>
+        <CardContent>
+          <p className="text-gray-800">This order is for store pickup.</p>
+        </CardContent>
+      </Card>
 
       <Card className="mb-6">
         <CardHeader>
