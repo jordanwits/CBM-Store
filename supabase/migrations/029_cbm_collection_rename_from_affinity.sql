@@ -1,35 +1,9 @@
--- Dual points buckets: universal vs restricted (CBM collection only)
-
--- 1. Ledger: point type (existing rows = universal)
-ALTER TABLE points_ledger
-  ADD COLUMN IF NOT EXISTS point_type TEXT NOT NULL DEFAULT 'universal'
-  CHECK (point_type IN ('universal', 'restricted'));
+-- Products may still carry the old "Affinity" tag if migration 028 ran before the collection was renamed to "CBM".
+UPDATE products
+SET collections = array_replace(collections, 'Affinity', 'CBM')
+WHERE collections IS NOT NULL AND 'Affinity' = ANY(collections);
 
 COMMENT ON COLUMN points_ledger.point_type IS 'universal: spend anywhere; restricted: spend only on products in CBM collection';
-
--- 2. Orders: how each order was funded (for correct refunds)
-ALTER TABLE orders ADD COLUMN IF NOT EXISTS restricted_points_used INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE orders ADD COLUMN IF NOT EXISTS universal_points_used INTEGER NOT NULL DEFAULT 0;
-
--- Historical orders were paid entirely from universal bucket (pre-restriction)
-UPDATE orders
-SET universal_points_used = total_points,
-    restricted_points_used = 0
-WHERE universal_points_used = 0 AND restricted_points_used = 0;
-
--- 3. Balances helper (JSON for Supabase RPC)
-CREATE OR REPLACE FUNCTION get_user_points_balances(p_user_id UUID)
-RETURNS JSON AS $$
-  SELECT json_build_object(
-    'universal', COALESCE(SUM(CASE WHEN point_type = 'universal' THEN delta_points ELSE 0 END), 0)::INTEGER,
-    'restricted', COALESCE(SUM(CASE WHEN point_type = 'restricted' THEN delta_points ELSE 0 END), 0)::INTEGER,
-    'total', COALESCE(SUM(delta_points), 0)::INTEGER
-  )::json
-  FROM points_ledger
-  WHERE user_id = p_user_id;
-$$ LANGUAGE SQL STABLE;
-
-COMMENT ON FUNCTION get_user_points_balances IS 'Per-bucket and total points balance for a user';
 
 -- 4. Checkout: spend restricted on CBM-collection subtotal first, then universal
 CREATE OR REPLACE FUNCTION place_points_order(
@@ -280,6 +254,3 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 COMMENT ON FUNCTION place_points_order IS
 'Pickup-only: creates order, inventory updates, deducts restricted then universal points for CBM-collection lines.';
-
-GRANT EXECUTE ON FUNCTION get_user_points_balances(UUID) TO authenticated;
-GRANT EXECUTE ON FUNCTION get_user_points_balances(UUID) TO service_role;

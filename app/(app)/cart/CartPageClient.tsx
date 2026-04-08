@@ -12,7 +12,7 @@ import Image from 'next/image';
 import { getCart, updateCartItemQuantity, removeFromCart, clearCart } from '@/lib/cart/storage';
 import type { CartItemWithDetails, CartItem } from '@/lib/cart/types';
 import { getCartProductData, getCartBalances } from './actions';
-import { allocateCheckoutSpend, isAffinityProduct } from '@/lib/points/buckets';
+import { allocateCheckoutSpend, isCbmCollectionProduct } from '@/lib/points/buckets';
 
 interface CartPageClientProps {
   isDevMode: boolean;
@@ -25,7 +25,7 @@ const mockProducts = [
     name: 'Company Logo T-Shirt',
     base_usd: 25.0,
     images: ['/ChrisCrossBlackCottonT-Shirt.webp'],
-    collections: ['Affinity', 'Essentials'],
+    collections: ['CBM', 'Essentials'],
   },
   { id: '2', name: 'Insulated Water Bottle', base_usd: 35.0, images: ['/KiyoUVC-Bottle_Studio_Fullsize-500ml_Black_C2_4480x.jpg'], collections: [] },
   { id: '3', name: 'Laptop Backpack', base_usd: 75.0, images: ['/1200W-18684-Black-0-NKDH7709BlackBagFront3.jpg'], collections: [] },
@@ -86,7 +86,7 @@ export default function CartPageClient({ isDevMode }: CartPageClientProps) {
           productName: 'Unknown Product',
           pointsPerItem: 0,
           totalPoints: 0,
-          affinityEligible: false,
+          cbmCollectionEligible: false,
         };
       }
 
@@ -95,7 +95,7 @@ export default function CartPageClient({ isDevMode }: CartPageClientProps) {
         ? Math.round(Number(variant.price_adjustment_usd ?? 0) * conversionRate)
         : 0;
       const pointsPerItem = basePoints + variantAdjustment;
-      const affinityEligible = isAffinityProduct(product.collections);
+      const cbmCollectionEligible = isCbmCollectionProduct(product.collections);
 
       return {
         ...item,
@@ -104,7 +104,7 @@ export default function CartPageClient({ isDevMode }: CartPageClientProps) {
         pointsPerItem,
         totalPoints: pointsPerItem * item.quantity,
         imageUrl: product.images?.[0],
-        affinityEligible,
+        cbmCollectionEligible,
       };
     });
 
@@ -136,7 +136,7 @@ export default function CartPageClient({ isDevMode }: CartPageClientProps) {
   const totalPoints = cartItems.reduce((sum, item) => sum + item.totalPoints, 0);
   const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
   const eligiblePoints = cartItems.reduce(
-    (sum, item) => sum + (item.affinityEligible ? item.totalPoints : 0),
+    (sum, item) => sum + (item.cbmCollectionEligible ? item.totalPoints : 0),
     0
   );
   const spendPlan = allocateCheckoutSpend(

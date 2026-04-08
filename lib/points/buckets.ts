@@ -1,8 +1,8 @@
-/** Collection tag that marks products spendable with CBM (restricted) points */
-export const AFFINITY_COLLECTION = 'Affinity';
+/** Collection tag: products in this collection can be paid with CBM (restricted) points first. */
+export const CBM_COLLECTION = 'CBM';
 
-export function isAffinityProduct(collections: string[] | null | undefined): boolean {
-  return Array.isArray(collections) && collections.includes(AFFINITY_COLLECTION);
+export function isCbmCollectionProduct(collections: string[] | null | undefined): boolean {
+  return Array.isArray(collections) && collections.includes(CBM_COLLECTION);
 }
 
 export type PointsBalancesJson = {
@@ -11,7 +11,7 @@ export type PointsBalancesJson = {
   total: number;
 };
 
-/** Mirrors checkout RPC: CBM bucket applied to Affinity-eligible subtotal first, then universal for the rest. */
+/** Mirrors checkout RPC: CBM bucket applied to CBM-collection subtotal first, then universal for the rest. */
 export function allocateCheckoutSpend(
   totalPoints: number,
   eligiblePoints: number,

@@ -49,7 +49,7 @@ export function ProductForm({ mode, productId, initialData, isDevMode }: Product
   }>>([]);
 
   const availableCollections = [
-    'Affinity',
+    'CBM',
     'New Arrivals',
     'Custom Order',
     'Essentials',

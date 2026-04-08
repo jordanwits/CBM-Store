@@ -13,7 +13,7 @@ import { getCart, clearCart } from '@/lib/cart/storage';
 import type { CartItemWithDetails } from '@/lib/cart/types';
 import Image from 'next/image';
 import { getCheckoutData } from './actions';
-import { allocateCheckoutSpend, isAffinityProduct } from '@/lib/points/buckets';
+import { allocateCheckoutSpend, isCbmCollectionProduct } from '@/lib/points/buckets';
 
 interface CheckoutPageClientProps {
   isDevMode: boolean;
@@ -21,7 +21,7 @@ interface CheckoutPageClientProps {
 }
 
 const mockProducts = [
-  { id: '1', name: 'Company Logo T-Shirt', base_usd: 25.0, images: ['/ChrisCrossBlackCottonT-Shirt.webp'], collections: ['Affinity', 'Essentials'] },
+  { id: '1', name: 'Company Logo T-Shirt', base_usd: 25.0, images: ['/ChrisCrossBlackCottonT-Shirt.webp'], collections: ['CBM', 'Essentials'] },
   { id: '2', name: 'Insulated Water Bottle', base_usd: 35.0, images: ['/KiyoUVC-Bottle_Studio_Fullsize-500ml_Black_C2_4480x.jpg'], collections: [] },
   { id: '3', name: 'Laptop Backpack', base_usd: 75.0, images: ['/1200W-18684-Black-0-NKDH7709BlackBagFront3.jpg'], collections: [] },
   { id: '4', name: 'Wireless Mouse', base_usd: 45.0, images: ['/b43457a0-76b6-11f0-9faf-5258f188704a.png'], collections: [] },
@@ -84,7 +84,7 @@ export default function CheckoutPageClient({
         productName: 'Unknown Product',
         pointsPerItem: 0,
         totalPoints: 0,
-        affinityEligible: false,
+        cbmCollectionEligible: false,
       };
     }
 
@@ -93,7 +93,7 @@ export default function CheckoutPageClient({
         ? Math.round(Number(variant.price_adjustment_usd ?? 0) * conversionRate)
         : 0;
     const pointsPerItem = basePoints + variantAdjustment;
-    const affinityEligible = isAffinityProduct(product.collections);
+    const cbmCollectionEligible = isCbmCollectionProduct(product.collections);
 
     return {
       ...item,
@@ -102,7 +102,7 @@ export default function CheckoutPageClient({
       pointsPerItem,
       totalPoints: pointsPerItem * item.quantity,
       imageUrl: product.images?.[0],
-      affinityEligible,
+      cbmCollectionEligible,
     };
     });
 
@@ -116,7 +116,7 @@ export default function CheckoutPageClient({
 
   const totalPoints = cartItems.reduce((sum, item) => sum + item.totalPoints, 0);
   const eligiblePoints = cartItems.reduce(
-    (sum, item) => sum + (item.affinityEligible ? item.totalPoints : 0),
+    (sum, item) => sum + (item.cbmCollectionEligible ? item.totalPoints : 0),
     0
   );
   const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
@@ -139,7 +139,7 @@ export default function CheckoutPageClient({
 
     if (hasInsufficientPoints) {
       setError(
-        'Insufficient points for this order. CBM points apply to Affinity-tagged items first; universal points cover the rest.'
+        'Insufficient points for this order. CBM points apply to CBM collection items first; universal points cover the rest.'
       );
       return;
     }
@@ -247,9 +247,9 @@ export default function CheckoutPageClient({
                           <p className="text-sm text-gray-600">{item.variantName}</p>
                         )}
                         <p className="text-sm text-gray-500">Qty: {item.quantity}</p>
-                        {item.affinityEligible && (
+                        {item.cbmCollectionEligible && (
                           <p className="text-xs text-primary font-medium mt-0.5">
-                            Affinity — CBM points apply first
+                            CBM collection — CBM points apply first
                           </p>
                         )}
                       </div>
@@ -297,7 +297,7 @@ export default function CheckoutPageClient({
                   </div>
                   {eligiblePoints > 0 && (
                     <p className="text-xs text-gray-600 mb-2">
-                      Affinity-eligible in cart: {eligiblePoints.toLocaleString()} pts (CBM points apply here first)
+                      CBM collection in cart: {eligiblePoints.toLocaleString()} pts (CBM points apply here first)
                     </p>
                   )}
                   {!hasInsufficientPoints && (

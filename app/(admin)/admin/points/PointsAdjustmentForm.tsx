@@ -180,9 +180,9 @@ export default function PointsAdjustmentForm({ isDevMode }: PointsAdjustmentForm
             className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
           >
             <option value="universal">Universal (any product)</option>
-            <option value="restricted">CBM points (Affinity collection only)</option>
+            <option value="restricted">CBM points (CBM collection only)</option>
           </select>
-          <p className="text-xs text-gray-600 mt-1">CBM points apply at checkout to Affinity-tagged products first.</p>
+          <p className="text-xs text-gray-600 mt-1">CBM points apply at checkout to products in the CBM collection first.</p>
         </div>
         <div>
           <Input
