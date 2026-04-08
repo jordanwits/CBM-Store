@@ -11,7 +11,8 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { getCart, updateCartItemQuantity, removeFromCart, clearCart } from '@/lib/cart/storage';
 import type { CartItemWithDetails, CartItem } from '@/lib/cart/types';
-import { getCartProductData } from './actions';
+import { getCartProductData, getCartBalances } from './actions';
+import { allocateCheckoutSpend, isAffinityProduct } from '@/lib/points/buckets';
 
 interface CartPageClientProps {
   isDevMode: boolean;
@@ -19,15 +20,25 @@ interface CartPageClientProps {
 
 // Mock data for dev mode
 const mockProducts = [
-  { id: '1', name: 'Company Logo T-Shirt', base_usd: 25.00, images: ['/ChrisCrossBlackCottonT-Shirt.webp'] },
-  { id: '2', name: 'Insulated Water Bottle', base_usd: 35.00, images: ['/KiyoUVC-Bottle_Studio_Fullsize-500ml_Black_C2_4480x.jpg'] },
-  { id: '3', name: 'Laptop Backpack', base_usd: 75.00, images: ['/1200W-18684-Black-0-NKDH7709BlackBagFront3.jpg'] },
-  { id: '4', name: 'Wireless Mouse', base_usd: 45.00, images: ['/b43457a0-76b6-11f0-9faf-5258f188704a.png'] },
-  { id: '5', name: 'Notebook Set', base_usd: 20.00, images: ['/moleskine-classic-hardcover-notebook-black.webp'] },
+  {
+    id: '1',
+    name: 'Company Logo T-Shirt',
+    base_usd: 25.0,
+    images: ['/ChrisCrossBlackCottonT-Shirt.webp'],
+    collections: ['Affinity', 'Essentials'],
+  },
+  { id: '2', name: 'Insulated Water Bottle', base_usd: 35.0, images: ['/KiyoUVC-Bottle_Studio_Fullsize-500ml_Black_C2_4480x.jpg'], collections: [] },
+  { id: '3', name: 'Laptop Backpack', base_usd: 75.0, images: ['/1200W-18684-Black-0-NKDH7709BlackBagFront3.jpg'], collections: [] },
+  { id: '4', name: 'Wireless Mouse', base_usd: 45.0, images: ['/b43457a0-76b6-11f0-9faf-5258f188704a.png'], collections: [] },
+  { id: '5', name: 'Notebook Set', base_usd: 20.0, images: ['/moleskine-classic-hardcover-notebook-black.webp'], collections: [] },
 ];
 
 export default function CartPageClient({ isDevMode }: CartPageClientProps) {
   const [cartItems, setCartItems] = useState<CartItemWithDetails[]>([]);
+  const [universalBalance, setUniversalBalance] = useState(0);
+  const [restrictedBalance, setRestrictedBalance] = useState(0);
+  /** When false (guest / no session), spend split is still shown using $0 buckets but checkout is not gated on balance. */
+  const [canCheckAffordability, setCanCheckAffordability] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   const loadCart = useCallback(async () => {
@@ -35,6 +46,7 @@ export default function CartPageClient({ isDevMode }: CartPageClientProps) {
     
     if (cart.items.length === 0) {
       setCartItems([]);
+      setCanCheckAffordability(false);
       setIsLoading(false);
       return;
     }
@@ -45,12 +57,20 @@ export default function CartPageClient({ isDevMode }: CartPageClientProps) {
 
     if (isDevMode) {
       products = mockProducts;
+      setUniversalBalance(2000);
+      setRestrictedBalance(500);
+      setCanCheckAffordability(true);
     } else {
-      // Fetch only the products in the cart via server action - much faster!
-      const data = await getCartProductData(cart.items);
+      const [data, balances] = await Promise.all([
+        getCartProductData(cart.items),
+        getCartBalances(),
+      ]);
       products = data.products;
       variants = data.variants;
       conversionRate = data.conversionRate;
+      setUniversalBalance(balances?.universalBalance ?? 0);
+      setRestrictedBalance(balances?.restrictedBalance ?? 0);
+      setCanCheckAffordability(balances != null);
     }
     
     // Enrich cart items with product/variant details
@@ -61,20 +81,21 @@ export default function CartPageClient({ isDevMode }: CartPageClientProps) {
         : undefined;
 
       if (!product) {
-        // Product not found - return a minimal item
         return {
           ...item,
           productName: 'Unknown Product',
           pointsPerItem: 0,
           totalPoints: 0,
+          affinityEligible: false,
         };
       }
 
-      const basePoints = Math.round(product.base_usd * conversionRate);
+      const basePoints = Math.round(Number(product.base_usd) * conversionRate);
       const variantAdjustment = variant
-        ? Math.round(variant.price_adjustment_usd * conversionRate)
+        ? Math.round(Number(variant.price_adjustment_usd ?? 0) * conversionRate)
         : 0;
       const pointsPerItem = basePoints + variantAdjustment;
+      const affinityEligible = isAffinityProduct(product.collections);
 
       return {
         ...item,
@@ -83,6 +104,7 @@ export default function CartPageClient({ isDevMode }: CartPageClientProps) {
         pointsPerItem,
         totalPoints: pointsPerItem * item.quantity,
         imageUrl: product.images?.[0],
+        affinityEligible,
       };
     });
 
@@ -113,6 +135,17 @@ export default function CartPageClient({ isDevMode }: CartPageClientProps) {
 
   const totalPoints = cartItems.reduce((sum, item) => sum + item.totalPoints, 0);
   const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+  const eligiblePoints = cartItems.reduce(
+    (sum, item) => sum + (item.affinityEligible ? item.totalPoints : 0),
+    0
+  );
+  const spendPlan = allocateCheckoutSpend(
+    totalPoints,
+    eligiblePoints,
+    restrictedBalance,
+    universalBalance
+  );
+  const affordanceOk = !canCheckAffordability || spendPlan.canAfford;
 
   if (isLoading) {
     return (
@@ -284,25 +317,61 @@ export default function CartPageClient({ isDevMode }: CartPageClientProps) {
                 </div>
               </div>
               
-              <div className="border-t pt-4">
-                <div className="flex justify-between items-baseline mb-6">
-                  <span className="text-lg font-semibold text-gray-900">Total</span>
-                  <div className="text-right">
-                    <p className="text-3xl font-bold text-secondary">
-                      {totalPoints.toLocaleString()}
-                    </p>
-                    <p className="text-sm text-gray-500">points</p>
+              <div className="border-t pt-4 space-y-4">
+                <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">
+                  Estimated spend (checkout order)
+                </p>
+                <div className="space-y-4 mb-2">
+                  <div className="flex justify-between items-start gap-3">
+                    <span className="text-sm font-semibold text-gray-900">Universal points</span>
+                    <div className="text-right">
+                      <p className="text-3xl font-bold text-secondary leading-tight">
+                        {spendPlan.universalSpend.toLocaleString()}
+                      </p>
+                      <p className="text-sm text-gray-500">points</p>
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-start gap-3">
+                    <span className="text-sm font-semibold text-gray-900">CBM points</span>
+                    <div className="text-right">
+                      <p className="text-3xl font-bold text-secondary leading-tight">
+                        {spendPlan.restrictedSpend.toLocaleString()}
+                      </p>
+                      <p className="text-sm text-gray-500">points</p>
+                    </div>
                   </div>
                 </div>
+                {canCheckAffordability && !spendPlan.canAfford && (
+                  <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                    Not enough universal points for this cart. Remove items or earn more points before
+                    checkout.
+                  </p>
+                )}
 
-                <Link href="/checkout" className="block mb-3">
-                  <Button variant="primary" className="w-full h-12 text-base font-semibold">
-                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    Proceed to Checkout
-                  </Button>
-                </Link>
+                {affordanceOk ? (
+                  <Link href="/checkout" className="block mb-3">
+                    <Button variant="primary" className="w-full h-12 text-base font-semibold">
+                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Proceed to Checkout
+                    </Button>
+                  </Link>
+                ) : (
+                  <div className="block mb-3">
+                    <Button
+                      variant="primary"
+                      className="w-full h-12 text-base font-semibold"
+                      disabled
+                      aria-disabled
+                    >
+                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Proceed to Checkout
+                    </Button>
+                  </div>
+                )}
                 
                 <Link href="/dashboard" className="block">
                   <Button variant="outline" className="w-full">

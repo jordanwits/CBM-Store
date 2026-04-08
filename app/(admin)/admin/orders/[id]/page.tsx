@@ -149,6 +149,11 @@ export default async function AdminOrderDetailPage({
               <div>
                 <p className="text-sm text-gray-700 font-medium">Total Points</p>
                 <p className="text-2xl font-bold text-blue-700 mt-1">{order.total_points}</p>
+                <p className="text-xs text-gray-600 mt-1">
+                  CBM points {(order as { restricted_points_used?: number }).restricted_points_used ?? 0} ·
+                  Universal{' '}
+                  {(order as { universal_points_used?: number }).universal_points_used ?? 0}
+                </p>
               </div>
             </div>
           </CardContent>

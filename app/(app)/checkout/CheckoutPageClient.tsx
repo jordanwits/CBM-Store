@@ -13,6 +13,7 @@ import { getCart, clearCart } from '@/lib/cart/storage';
 import type { CartItemWithDetails } from '@/lib/cart/types';
 import Image from 'next/image';
 import { getCheckoutData } from './actions';
+import { allocateCheckoutSpend, isAffinityProduct } from '@/lib/points/buckets';
 
 interface CheckoutPageClientProps {
   isDevMode: boolean;
@@ -20,11 +21,11 @@ interface CheckoutPageClientProps {
 }
 
 const mockProducts = [
-  { id: '1', name: 'Company Logo T-Shirt', base_usd: 25.00, images: ['/ChrisCrossBlackCottonT-Shirt.webp'] },
-  { id: '2', name: 'Insulated Water Bottle', base_usd: 35.00, images: ['/KiyoUVC-Bottle_Studio_Fullsize-500ml_Black_C2_4480x.jpg'] },
-  { id: '3', name: 'Laptop Backpack', base_usd: 75.00, images: ['/1200W-18684-Black-0-NKDH7709BlackBagFront3.jpg'] },
-  { id: '4', name: 'Wireless Mouse', base_usd: 45.00, images: ['/b43457a0-76b6-11f0-9faf-5258f188704a.png'] },
-  { id: '5', name: 'Notebook Set', base_usd: 20.00, images: ['/moleskine-classic-hardcover-notebook-black.webp'] },
+  { id: '1', name: 'Company Logo T-Shirt', base_usd: 25.0, images: ['/ChrisCrossBlackCottonT-Shirt.webp'], collections: ['Affinity', 'Essentials'] },
+  { id: '2', name: 'Insulated Water Bottle', base_usd: 35.0, images: ['/KiyoUVC-Bottle_Studio_Fullsize-500ml_Black_C2_4480x.jpg'], collections: [] },
+  { id: '3', name: 'Laptop Backpack', base_usd: 75.0, images: ['/1200W-18684-Black-0-NKDH7709BlackBagFront3.jpg'], collections: [] },
+  { id: '4', name: 'Wireless Mouse', base_usd: 45.0, images: ['/b43457a0-76b6-11f0-9faf-5258f188704a.png'], collections: [] },
+  { id: '5', name: 'Notebook Set', base_usd: 20.0, images: ['/moleskine-classic-hardcover-notebook-black.webp'], collections: [] },
 ];
 
 export default function CheckoutPageClient({
@@ -34,6 +35,8 @@ export default function CheckoutPageClient({
   const router = useRouter();
   const [cartItems, setCartItems] = useState<CartItemWithDetails[]>([]);
   const [pointsBalance, setPointsBalance] = useState(0);
+  const [universalBalance, setUniversalBalance] = useState(0);
+  const [restrictedBalance, setRestrictedBalance] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,6 +53,8 @@ export default function CheckoutPageClient({
     let variants: any[] = [];
     let conversionRate = 100;
     let balance = 2500;
+    let universal = 2000;
+    let restricted = 500;
 
     if (isDevMode) {
       products = mockProducts;
@@ -59,9 +64,13 @@ export default function CheckoutPageClient({
       variants = data.variants;
       conversionRate = data.conversionRate;
       balance = data.pointsBalance;
+      universal = data.universalBalance;
+      restricted = data.restrictedBalance;
     }
 
     setPointsBalance(balance);
+    setUniversalBalance(universal);
+    setRestrictedBalance(restricted);
 
     const enriched: CartItemWithDetails[] = cart.items.map((item) => {
       const product = products.find((p) => p.id === item.productId);
@@ -70,28 +79,31 @@ export default function CheckoutPageClient({
         : undefined;
 
       if (!product) {
-        return {
-          ...item,
-          productName: 'Unknown Product',
-          pointsPerItem: 0,
-          totalPoints: 0,
-        };
-      }
-
-      const basePoints = Math.round(product.base_usd * conversionRate);
-      const variantAdjustment = variant
-        ? Math.round(variant.price_adjustment_usd * conversionRate)
-        : 0;
-      const pointsPerItem = basePoints + variantAdjustment;
-
       return {
         ...item,
-        productName: product.name,
-        variantName: variant?.name,
-        pointsPerItem,
-        totalPoints: pointsPerItem * item.quantity,
-        imageUrl: product.images?.[0],
+        productName: 'Unknown Product',
+        pointsPerItem: 0,
+        totalPoints: 0,
+        affinityEligible: false,
       };
+    }
+
+    const basePoints = Math.round(product.base_usd * conversionRate);
+      const variantAdjustment = variant
+        ? Math.round(Number(variant.price_adjustment_usd ?? 0) * conversionRate)
+        : 0;
+    const pointsPerItem = basePoints + variantAdjustment;
+    const affinityEligible = isAffinityProduct(product.collections);
+
+    return {
+      ...item,
+      productName: product.name,
+      variantName: variant?.name,
+      pointsPerItem,
+      totalPoints: pointsPerItem * item.quantity,
+      imageUrl: product.images?.[0],
+      affinityEligible,
+    };
     });
 
     setCartItems(enriched);
@@ -103,8 +115,18 @@ export default function CheckoutPageClient({
   }, [loadCart]);
 
   const totalPoints = cartItems.reduce((sum, item) => sum + item.totalPoints, 0);
+  const eligiblePoints = cartItems.reduce(
+    (sum, item) => sum + (item.affinityEligible ? item.totalPoints : 0),
+    0
+  );
   const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
-  const hasInsufficientPoints = totalPoints > pointsBalance;
+  const spendPlan = allocateCheckoutSpend(
+    totalPoints,
+    eligiblePoints,
+    restrictedBalance,
+    universalBalance
+  );
+  const hasInsufficientPoints = !spendPlan.canAfford;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -116,7 +138,9 @@ export default function CheckoutPageClient({
     }
 
     if (hasInsufficientPoints) {
-      setError('Insufficient points balance for this order.');
+      setError(
+        'Insufficient points for this order. CBM points apply to Affinity-tagged items first; universal points cover the rest.'
+      );
       return;
     }
 
@@ -223,6 +247,11 @@ export default function CheckoutPageClient({
                           <p className="text-sm text-gray-600">{item.variantName}</p>
                         )}
                         <p className="text-sm text-gray-500">Qty: {item.quantity}</p>
+                        {item.affinityEligible && (
+                          <p className="text-xs text-primary font-medium mt-0.5">
+                            Affinity — CBM points apply first
+                          </p>
+                        )}
                       </div>
                       <div className="text-right">
                         <p className="font-semibold text-gray-900">{item.totalPoints} pts</p>
@@ -246,34 +275,61 @@ export default function CheckoutPageClient({
                     ? 'bg-red-50 border-red-200'
                     : 'bg-blue-50 border-blue-200'
                 }`}>
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-sm font-medium text-gray-700">Your balance</span>
-                    <span className="text-xl font-bold text-gray-900">
-                      {pointsBalance.toLocaleString()} pts
-                    </span>
+                  <div className="space-y-1 mb-3 text-sm">
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium text-gray-700">Universal balance</span>
+                      <span className="font-bold text-gray-900">{universalBalance.toLocaleString()} pts</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium text-gray-700">CBM points balance</span>
+                      <span className="font-bold text-gray-900">{restrictedBalance.toLocaleString()} pts</span>
+                    </div>
+                    <div className="flex justify-between items-center pt-1 border-t border-blue-200/80">
+                      <span className="text-xs text-gray-600">Total across buckets</span>
+                      <span className="text-sm font-semibold text-gray-800">{pointsBalance.toLocaleString()} pts</span>
+                    </div>
                   </div>
-                  <div className="flex justify-between items-center">
+                  <div className="flex justify-between items-center mb-2">
                     <span className="text-sm font-medium text-gray-700">Order total</span>
                     <span className="text-xl font-bold text-gray-900">
                       {totalPoints.toLocaleString()} pts
                     </span>
                   </div>
+                  {eligiblePoints > 0 && (
+                    <p className="text-xs text-gray-600 mb-2">
+                      Affinity-eligible in cart: {eligiblePoints.toLocaleString()} pts (CBM points apply here first)
+                    </p>
+                  )}
+                  {!hasInsufficientPoints && (
+                    <div className="text-xs text-gray-700 space-y-0.5 mb-2">
+                      <p>
+                        This order will use{' '}
+                        <strong>{spendPlan.restrictedSpend.toLocaleString()}</strong> CBM points +{' '}
+                        <strong>{spendPlan.universalSpend.toLocaleString()}</strong> universal pts
+                      </p>
+                    </div>
+                  )}
                   {hasInsufficientPoints && (
                     <div className="mt-3 pt-3 border-t border-red-300">
                       <p className="text-sm font-semibold text-red-800">Insufficient points</p>
                       <p className="text-xs text-red-700 mt-1">
-                        You need {(totalPoints - pointsBalance).toLocaleString()} more points to complete this order
+                        Adjust your cart or earn more points. Universal shortfall:{' '}
+                        {Math.max(0, spendPlan.universalSpend - universalBalance).toLocaleString()} pts
                       </p>
                     </div>
                   )}
                   {!hasInsufficientPoints && (
                     <div className="mt-3 pt-3 border-t border-secondary/30">
                       <div className="flex justify-between items-center">
-                        <span className="text-sm font-medium text-gray-700">After purchase</span>
+                        <span className="text-sm font-medium text-gray-700">After purchase (est.)</span>
                         <span className="text-lg font-bold text-primary">
-                          {(pointsBalance - totalPoints).toLocaleString()} pts
+                          {(pointsBalance - totalPoints).toLocaleString()} pts total
                         </span>
                       </div>
+                      <p className="text-xs text-gray-600 mt-1">
+                        Universal: {(universalBalance - spendPlan.universalSpend).toLocaleString()} · CBM points:{' '}
+                        {(restrictedBalance - spendPlan.restrictedSpend).toLocaleString()}
+                      </p>
                     </div>
                   )}
                 </div>

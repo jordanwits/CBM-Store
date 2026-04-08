@@ -23,24 +23,28 @@ export async function RecentTransactionsCard({ isDevMode, userId }: RecentTransa
         id: '1',
         reason: 'Welcome bonus',
         delta_points: 1000,
+        point_type: 'universal',
         created_at: new Date().toISOString(),
       },
       {
         id: '2',
         reason: 'Monthly reward',
         delta_points: 1500,
+        point_type: 'restricted',
         created_at: new Date(Date.now() - 86400000).toISOString(),
       },
       {
         id: '3',
         reason: 'Order #ABCD1234',
         delta_points: -500,
+        point_type: 'universal',
         created_at: new Date(Date.now() - 2 * 86400000).toISOString(),
       },
       {
         id: '4',
         reason: 'Performance bonus',
         delta_points: 500,
+        point_type: 'universal',
         created_at: new Date(Date.now() - 7 * 86400000).toISOString(),
       },
     ].filter(t => new Date(t.created_at) >= thirtyDaysAgo);
@@ -62,7 +66,7 @@ export async function RecentTransactionsCard({ isDevMode, userId }: RecentTransa
         .gte('created_at', cutoffISO),
       supabase
         .from('points_ledger')
-        .select('id, reason, delta_points, created_at')
+        .select('id, reason, delta_points, created_at, point_type')
         .eq('user_id', userId)
         .gte('created_at', cutoffISO)
         .order('created_at', { ascending: false })
@@ -114,6 +118,11 @@ export async function RecentTransactionsCard({ isDevMode, userId }: RecentTransa
                         <p className="font-semibold text-gray-900 truncate">{entry.reason}</p>
                         <p className="text-sm text-gray-500 mt-0.5">
                           <FormattedDate date={entry.created_at} format="datetimeShort" />
+                          {entry.point_type && (
+                            <span className="ml-2 text-xs font-medium text-primary">
+                              ({entry.point_type === 'restricted' ? 'CBM points' : 'Universal points'})
+                            </span>
+                          )}
                         </p>
                       </div>
                     </div>

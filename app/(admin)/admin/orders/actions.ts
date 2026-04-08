@@ -157,7 +157,7 @@ export async function refundOrder(
 
   const { data: order, error: orderError } = await supabase
     .from('orders')
-    .select('id, user_id, total_points')
+    .select('id, user_id, total_points, restricted_points_used, universal_points_used')
     .eq('id', orderId)
     .single();
 
@@ -176,18 +176,43 @@ export async function refundOrder(
     return { success: false, error: 'This order has already been refunded' };
   }
 
-  // Refund points
-  const { error: refundError } = await supabase.from('points_ledger').insert({
-    user_id: order.user_id,
-    delta_points: order.total_points,
-    reason: `Refund${options.withReturn ? ' (with return)' : ''} for order #${orderId.slice(0, 8).toUpperCase()}`,
-    order_id: orderId,
-    created_by: user.id,
-  });
+  const totalPts = order.total_points ?? 0;
+  let restrictedRefund = Number((order as { restricted_points_used?: number }).restricted_points_used ?? 0);
+  let universalRefund = Number((order as { universal_points_used?: number }).universal_points_used ?? 0);
+  if (restrictedRefund === 0 && universalRefund === 0 && totalPts > 0) {
+    universalRefund = totalPts;
+  }
 
-  if (refundError) {
-    console.error('Error refunding points:', refundError);
-    return { success: false, error: 'Failed to refund points' };
+  const reasonBase = `Refund${options.withReturn ? ' (with return)' : ''} for order #${orderId.slice(0, 8).toUpperCase()}`;
+
+  if (restrictedRefund > 0) {
+    const { error: rErr } = await supabase.from('points_ledger').insert({
+      user_id: order.user_id,
+      delta_points: restrictedRefund,
+      reason: reasonBase,
+      order_id: orderId,
+      created_by: user.id,
+      point_type: 'restricted',
+    });
+    if (rErr) {
+      console.error('Error refunding CBM points:', rErr);
+      return { success: false, error: 'Failed to refund points' };
+    }
+  }
+
+  if (universalRefund > 0) {
+    const { error: uErr } = await supabase.from('points_ledger').insert({
+      user_id: order.user_id,
+      delta_points: universalRefund,
+      reason: reasonBase,
+      order_id: orderId,
+      created_by: user.id,
+      point_type: 'universal',
+    });
+    if (uErr) {
+      console.error('Error refunding universal points:', uErr);
+      return { success: false, error: 'Failed to refund points' };
+    }
   }
 
   if (options.withReturn) {

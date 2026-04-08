@@ -18,6 +18,8 @@ type UserRow = {
   active: boolean;
   created_at: string;
   points_balance: number;
+  points_universal?: number;
+  points_restricted?: number;
 };
 
 type AccessRequest = {

@@ -49,6 +49,7 @@ export function ProductForm({ mode, productId, initialData, isDevMode }: Product
   }>>([]);
 
   const availableCollections = [
+    'Affinity',
     'New Arrivals',
     'Custom Order',
     'Essentials',

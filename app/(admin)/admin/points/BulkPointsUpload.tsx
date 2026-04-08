@@ -54,7 +54,8 @@ export function BulkPointsUpload({ isDevMode }: BulkPointsUploadProps) {
   };
 
   const handleDownloadTemplate = () => {
-    const csv = 'email,delta_points,reason\nuser@example.com,100,Monthly bonus\nuser2@example.com,-50,Point correction';
+    const csv =
+      'email,delta_points,reason,point_type\nuser@example.com,100,Monthly bonus,universal\nuser2@example.com,200,CBM starter,restricted';
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -99,10 +100,15 @@ export function BulkPointsUpload({ isDevMode }: BulkPointsUploadProps) {
 
         <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
           <p className="text-sm text-blue-900 mb-2">
-            <strong>CSV Format:</strong> email, delta_points, reason (optional)
+            <strong>CSV Format:</strong> email, delta_points, reason (optional), point_type (optional:{' '}
+            universal or restricted — restricted credits CBM points)
           </p>
           <ul className="text-sm text-blue-800 space-y-1 ml-4">
             <li>• Use positive numbers to add points, negative to deduct</li>
+            <li>
+              • For CBM points, use point_type <code className="bg-blue-100 px-1 rounded">restricted</code> in
+              column 3 (with default reason) or column 4 with reason in column 3
+            </li>
             <li>• Header row is optional</li>
             <li>• Supports Windows (CRLF), Unix (LF), and Mac (CR) line endings</li>
           </ul>

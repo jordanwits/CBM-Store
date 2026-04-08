@@ -7,6 +7,7 @@ import type { Cart, CartItem } from '@/lib/cart/types';
 import { sendEmail, getAdminEmails } from '@/lib/email/resend';
 import { customerOrderConfirmationEmail, adminNewOrderEmail } from '@/lib/email/templates';
 import { getStoreSettings, getProductsByIds, getVariantsByProductIds } from '@/lib/cache/store-data';
+import { parsePointsBalancesRpc } from '@/lib/points/buckets';
 
 interface PlaceOrderResult {
   success: boolean;
@@ -18,13 +19,23 @@ export interface CheckoutData {
   products: any[];
   variants: any[];
   conversionRate: number;
+  /** Total points across all buckets (same as legacy single balance) */
   pointsBalance: number;
+  universalBalance: number;
+  restrictedBalance: number;
 }
 
 // Fetch checkout data based on cart items - only fetches what's needed
 export async function getCheckoutData(cartItems: { productId: string; variantId?: string; quantity: number }[]): Promise<CheckoutData> {
   if (cartItems.length === 0) {
-    return { products: [], variants: [], conversionRate: 100, pointsBalance: 0 };
+    return {
+      products: [],
+      variants: [],
+      conversionRate: 100,
+      pointsBalance: 0,
+      universalBalance: 0,
+      restrictedBalance: 0,
+    };
   }
 
   const supabase = await createClient();
@@ -33,24 +44,48 @@ export async function getCheckoutData(cartItems: { productId: string; variantId?
   } = await supabase.auth.getSession();
   const userId = session?.access_token ? getJwtSubject(session.access_token) : null;
   if (!userId) {
-    return { products: [], variants: [], conversionRate: 100, pointsBalance: 0 };
+    return {
+      products: [],
+      variants: [],
+      conversionRate: 100,
+      pointsBalance: 0,
+      universalBalance: 0,
+      restrictedBalance: 0,
+    };
   }
 
   const productIds = [...new Set(cartItems.map(item => item.productId))];
   
   // Fetch all data in parallel for maximum speed
-  const [settings, products, variants, balanceResult] = await Promise.all([
+  const [settings, products, variants, balancesResult, legacyTotalResult] = await Promise.all([
     getStoreSettings(),
     getProductsByIds(productIds),
     getVariantsByProductIds(productIds),
+    supabase.rpc('get_user_points_balances', { p_user_id: userId }),
     supabase.rpc('get_user_points_balance', { p_user_id: userId }),
   ]);
+
+  let universalBalance = 0;
+  let restrictedBalance = 0;
+  let pointsBalance = legacyTotalResult.data || 0;
+
+  if (!balancesResult.error && balancesResult.data != null) {
+    const b = parsePointsBalancesRpc(balancesResult.data);
+    universalBalance = b.universal;
+    restrictedBalance = b.restricted;
+    pointsBalance = b.total;
+  } else {
+    universalBalance = pointsBalance;
+    restrictedBalance = 0;
+  }
 
   return {
     products,
     variants,
     conversionRate: settings.conversionRate,
-    pointsBalance: balanceResult.data || 0,
+    pointsBalance,
+    universalBalance,
+    restrictedBalance,
   };
 }
 

@@ -8,6 +8,7 @@ import { Button } from 'core/components/Button';
 import { FormattedDate } from 'core/components/FormattedDate';
 import Link from 'next/link';
 import { RecentTransactionsCard } from './RecentTransactionsCard';
+import { parsePointsBalancesRpc } from '@/lib/points/buckets';
 import { HistoryFilters } from './HistoryFilters';
 import { FilterDrawer } from 'core/components/FilterDrawer';
 
@@ -59,6 +60,8 @@ export default async function PointsHistoryPage({ searchParams }: PointsHistoryP
   }
 
   let pointsBalance = 0;
+  let universalBalance = 0;
+  let restrictedBalance = 0;
   let history: any[] = [];
   let totalEarned = 0;
   let totalSpent = 0;
@@ -68,6 +71,8 @@ export default async function PointsHistoryPage({ searchParams }: PointsHistoryP
   if (isDevMode) {
     // Mock data for dev mode
     pointsBalance = 2500;
+    universalBalance = 2000;
+    restrictedBalance = 500;
     history = [
       {
         id: '1',
@@ -162,7 +167,7 @@ export default async function PointsHistoryPage({ searchParams }: PointsHistoryP
     // Build paginated history query
     let historyQuery = supabase
       .from('points_ledger')
-      .select('id, reason, delta_points, created_at')
+      .select('id, reason, delta_points, created_at, point_type')
       .eq('user_id', userId);
     historyQuery = buildFilteredQuery(historyQuery);
     
@@ -171,14 +176,24 @@ export default async function PointsHistoryPage({ searchParams }: PointsHistoryP
       .range((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage - 1);
 
     // Run queries in parallel
-    const [balanceResult, countResult, totalsResult, historyResult] = await Promise.all([
+    const [balanceResult, balancesResult, countResult, totalsResult, historyResult] = await Promise.all([
       supabase.rpc('get_user_points_balance', { p_user_id: userId }),
+      supabase.rpc('get_user_points_balances', { p_user_id: userId }),
       countQuery,
       baseQuery.select('delta_points'), // Get all delta_points for totals calculation
       historyQuery,
     ]);
 
     pointsBalance = balanceResult.data || 0;
+    if (!balancesResult.error && balancesResult.data != null) {
+      const b = parsePointsBalancesRpc(balancesResult.data);
+      universalBalance = b.universal;
+      restrictedBalance = b.restricted;
+      pointsBalance = b.total;
+    } else {
+      universalBalance = pointsBalance;
+      restrictedBalance = 0;
+    }
     totalCount = countResult.count || 0;
     hasMore = totalCount > currentPage * itemsPerPage;
     history = historyResult.data || [];
@@ -273,6 +288,10 @@ export default async function PointsHistoryPage({ searchParams }: PointsHistoryP
               </div>
               <p className="text-sm font-medium text-gray-600 mb-2">Current Balance</p>
               <p className="text-4xl font-bold text-gray-900">{pointsBalance.toLocaleString()}</p>
+              <p className="text-xs text-gray-600 mt-2">
+                Universal {universalBalance.toLocaleString()} · CBM points{' '}
+                {restrictedBalance.toLocaleString()}
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -342,6 +361,11 @@ export default async function PointsHistoryPage({ searchParams }: PointsHistoryP
                         <p className="font-semibold text-gray-900 truncate">{entry.reason}</p>
                         <p className="text-sm text-gray-500 mt-0.5">
                           <FormattedDate date={entry.created_at} format="datetimeShort" />
+                          {entry.point_type && (
+                            <span className="ml-2 text-xs font-medium text-primary">
+                              ({entry.point_type === 'restricted' ? 'CBM points' : 'Universal points'})
+                            </span>
+                          )}
                         </p>
                       </div>
                     </div>

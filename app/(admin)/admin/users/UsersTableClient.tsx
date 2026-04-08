@@ -19,6 +19,8 @@ type UserRow = {
   active: boolean;
   created_at: string;
   points_balance: number;
+  points_universal?: number;
+  points_restricted?: number;
 };
 
 function loginIdentifier(u: UserRow): string {
@@ -423,7 +425,19 @@ export function UsersTableClient({
                   <div>
                     <span className="text-gray-500">Points Balance: </span>
                     <span className="text-gray-900 font-semibold">
-                      {isDevMode ? '-' : u.points_balance.toLocaleString()}
+                      {isDevMode ? (
+                        '-'
+                      ) : (
+                        <>
+                          {u.points_balance.toLocaleString()}
+                          {(u.points_universal !== undefined || u.points_restricted !== undefined) && (
+                            <span className="block text-xs font-normal text-gray-600 mt-0.5">
+                              Universal {(u.points_universal ?? 0).toLocaleString()} · CBM points{' '}
+                              {(u.points_restricted ?? 0).toLocaleString()}
+                            </span>
+                          )}
+                        </>
+                      )}
                     </span>
                   </div>
                   <p className="text-gray-500 text-xs">
@@ -570,7 +584,13 @@ export function UsersTableClient({
                       {isDevMode ? (
                         <span className="text-gray-400">-</span>
                       ) : (
-                        <span className="font-semibold">{u.points_balance.toLocaleString()}</span>
+                        <div>
+                          <span className="font-semibold">{u.points_balance.toLocaleString()}</span>
+                          <div className="text-xs font-normal text-gray-600">
+                            Universal {(u.points_universal ?? 0).toLocaleString()} · CBM points{' '}
+                            {(u.points_restricted ?? 0).toLocaleString()}
+                          </div>
+                        </div>
                       )}
                     </td>
 

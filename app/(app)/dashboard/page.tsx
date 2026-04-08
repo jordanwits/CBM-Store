@@ -9,6 +9,7 @@ import { SuggestProductButton } from './SuggestProductButton';
 import { FilterPanel } from './FilterPanel';
 import { FilterDrawer } from 'core/components/FilterDrawer';
 import { getStoreSettings, getFilterMetadata } from '@/lib/cache/store-data';
+import { parsePointsBalancesRpc } from '@/lib/points/buckets';
 
 // Enable aggressive caching: Revalidate this page every 5 minutes
 // This means the page will be statically generated and served from cache
@@ -62,7 +63,9 @@ export default async function DashboardPage({
   const isDevMode = !process.env.NEXT_PUBLIC_SUPABASE_URL || 
                     process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder');
   
-  let pointsBalance = 0;
+  let legacyPointsBalance = 0;
+  let universalBalance = 0;
+  let restrictedBalance = 0;
   let conversionRate = 100;
   let products: any[] = [];
   let allCategories: string[] = [];
@@ -72,7 +75,8 @@ export default async function DashboardPage({
   
   if (isDevMode) {
     // Mock data for dev mode
-    pointsBalance = 5500;
+    universalBalance = 5000;
+    restrictedBalance = 500;
     
     const mockProducts = [
       {
@@ -224,13 +228,22 @@ export default async function DashboardPage({
 
     // Run initial queries in parallel for faster loading
     // Using cached functions for settings and filters (data that rarely changes)
-    const [pointsResult, settings, filters] = await Promise.all([
+    const [pointsResult, balancesResult, settings, filters] = await Promise.all([
       supabase.rpc('get_user_points_balance', { p_user_id: userId }),
+      supabase.rpc('get_user_points_balances', { p_user_id: userId }),
       getStoreSettings(),
       getFilterMetadata(),
     ]);
 
-    pointsBalance = pointsResult.data || 0;
+    legacyPointsBalance = pointsResult.data || 0;
+    if (!balancesResult.error && balancesResult.data != null) {
+      const b = parsePointsBalancesRpc(balancesResult.data);
+      universalBalance = b.universal;
+      restrictedBalance = b.restricted;
+    } else {
+      universalBalance = legacyPointsBalance;
+      restrictedBalance = 0;
+    }
     conversionRate = settings.conversionRate;
     
     // Use cached filter metadata
@@ -379,8 +392,21 @@ export default async function DashboardPage({
 
   const pointsBalanceCard = (
     <div className="bg-gradient-to-br from-primary/10 to-secondary/10 rounded-lg py-4 mb-3">
-      <p className="text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Your Points</p>
-      <p className="text-3xl font-bold text-primary">{pointsBalance.toLocaleString()}</p>
+      <p className="text-xs font-semibold text-gray-600 mb-3 uppercase tracking-wide">Your Points</p>
+      <div className="space-y-3">
+        <div>
+          <p className="text-xs text-gray-600 mb-0.5">Universal</p>
+          <p className="text-3xl font-bold text-primary leading-tight">
+            {universalBalance.toLocaleString()}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs text-gray-600 mb-0.5">CBM points</p>
+          <p className="text-3xl font-bold text-primary leading-tight">
+            {restrictedBalance.toLocaleString()}
+          </p>
+        </div>
+      </div>
       <Link href="/points-history" className="text-xs text-secondary hover:text-secondary/80 font-bold inline-flex items-center gap-1 mt-2 transition-colors">
         View History
         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">

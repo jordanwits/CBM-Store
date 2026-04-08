@@ -31,6 +31,8 @@ export default async function OrderDetailPage({
     order = {
       id: 'mock-order-1',
       total_points: 10000,
+      restricted_points_used: 2500,
+      universal_points_used: 7500,
       status: 'processing',
       created_at: new Date(Date.now() - 2 * 86400000).toISOString(),
       notes: null,
@@ -80,7 +82,9 @@ export default async function OrderDetailPage({
     const [orderResult, itemsResult] = await Promise.all([
       supabase
         .from('orders')
-        .select('id, user_id, status, total_points, tracking_number, notes, created_at')
+        .select(
+          'id, user_id, status, total_points, restricted_points_used, universal_points_used, tracking_number, notes, created_at'
+        )
         .eq('id', id)
         .eq('user_id', userId)
         .single(),
@@ -161,6 +165,10 @@ export default async function OrderDetailPage({
                   {order.total_points.toLocaleString()}
                 </p>
                 <p className="text-sm text-gray-600 mt-1">points</p>
+                <p className="text-xs text-gray-600 mt-2">
+                  Paid with {(order.restricted_points_used ?? 0).toLocaleString()} CBM points +{' '}
+                  {(order.universal_points_used ?? 0).toLocaleString()} universal
+                </p>
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-500 mb-2">Total Items</p>

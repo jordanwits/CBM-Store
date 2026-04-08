@@ -14,4 +14,6 @@ export interface CartItemWithDetails extends CartItem {
   pointsPerItem: number;
   totalPoints: number;
   imageUrl?: string;
+  /** Product has Affinity collection — CBM points can apply to this line */
+  affinityEligible?: boolean;
 }

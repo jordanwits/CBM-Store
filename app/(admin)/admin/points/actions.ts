@@ -5,11 +5,14 @@ import { sendEmail } from '@/lib/email/resend';
 import { pointsAdjustmentNotificationEmail } from '@/lib/email/templates';
 import { revalidatePath } from 'next/cache';
 
+export type PointBucketType = 'universal' | 'restricted';
+
 export async function adjustUserPoints(
   userId: string,
   deltaPoints: number,
   reason: string,
-  notifyUser: boolean = false
+  notifyUser: boolean = false,
+  pointType: PointBucketType = 'universal'
 ) {
   const { supabase, profile } = await requireAdmin();
   
@@ -33,6 +36,8 @@ export async function adjustUserPoints(
     return { success: false, error: 'User not found' };
   }
   
+  const bucket: PointBucketType = pointType === 'restricted' ? 'restricted' : 'universal';
+
   // Insert into points ledger
   const { error } = await supabase
     .from('points_ledger')
@@ -41,6 +46,7 @@ export async function adjustUserPoints(
       delta_points: deltaPoints,
       reason: reason.trim(),
       created_by: profile.id,
+      point_type: bucket,
     });
   
   if (error) {
@@ -108,6 +114,31 @@ interface BulkPointsResult {
     failed: number;
     failures: Array<{ row: number; email: string; error: string }>;
   };
+}
+
+function normalizePointTypeField(raw: string | undefined): PointBucketType {
+  const v = raw?.trim().toLowerCase();
+  if (v === 'restricted') return 'restricted';
+  return 'universal';
+}
+
+/** CSV row: email, delta [, reason] [, point_type]. If exactly 3 cols and col3 is restricted|universal, treat as point_type. */
+function reasonAndPointTypeFromCsvFields(fields: string[]): { reason: string; pointType: PointBucketType } {
+  const defaultReason = 'Bulk points adjustment';
+  if (fields.length >= 4) {
+    return {
+      reason: fields[2]?.trim() || defaultReason,
+      pointType: normalizePointTypeField(fields[3]),
+    };
+  }
+  if (fields.length === 3) {
+    const third = fields[2]?.trim().toLowerCase() ?? '';
+    if (third === 'restricted' || third === 'universal') {
+      return { reason: defaultReason, pointType: third === 'restricted' ? 'restricted' : 'universal' };
+    }
+    return { reason: fields[2]?.trim() || defaultReason, pointType: 'universal' };
+  }
+  return { reason: defaultReason, pointType: 'universal' };
 }
 
 function parseCSVRow(line: string): string[] {
@@ -206,7 +237,7 @@ export async function bulkAdjustPointsFromCsv(formData: FormData): Promise<BulkP
       
       const email = fields[0].trim();
       const deltaPointsStr = fields[1].trim();
-      const reason = fields[2]?.trim() || 'Bulk points adjustment';
+      const { reason, pointType: rowPointType } = reasonAndPointTypeFromCsvFields(fields);
       
       // Validate email
       if (!email || !email.includes('@')) {
@@ -253,6 +284,7 @@ export async function bulkAdjustPointsFromCsv(formData: FormData): Promise<BulkP
           delta_points: deltaPoints,
           reason,
           created_by: profile.id,
+          point_type: rowPointType,
         });
       
       if (insertError) {

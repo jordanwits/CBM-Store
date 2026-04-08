@@ -82,7 +82,7 @@ const getProductsByIdsInternal = cache(async (productIds: string[]) => {
   const supabase = await createReadClient();
   const { data } = await supabase
     .from('products')
-    .select('id, name, base_usd, images, active')
+    .select('id, name, base_usd, images, active, collections')
     .in('id', productIds)
     .eq('active', true);
   

@@ -23,21 +23,30 @@ export default async function AdminUsersPage() {
     // Get point balances for all users efficiently
     const { data: pointsData } = await supabase
       .from('points_ledger')
-      .select('user_id, delta_points');
+      .select('user_id, delta_points, point_type');
     
-    // Calculate balances by user
     const balancesMap = new Map<string, number>();
+    const universalMap = new Map<string, number>();
+    const restrictedMap = new Map<string, number>();
     if (pointsData) {
       pointsData.forEach((entry: any) => {
-        const current = balancesMap.get(entry.user_id) || 0;
-        balancesMap.set(entry.user_id, current + entry.delta_points);
+        const uid = entry.user_id as string;
+        const d = entry.delta_points as number;
+        const pt = entry.point_type === 'restricted' ? 'restricted' : 'universal';
+        balancesMap.set(uid, (balancesMap.get(uid) || 0) + d);
+        if (pt === 'restricted') {
+          restrictedMap.set(uid, (restrictedMap.get(uid) || 0) + d);
+        } else {
+          universalMap.set(uid, (universalMap.get(uid) || 0) + d);
+        }
       });
     }
     
-    // Combine users with their point balances
     users = (profilesData || []).map((profile: any) => ({
       ...profile,
       points_balance: balancesMap.get(profile.id) || 0,
+      points_universal: universalMap.get(profile.id) || 0,
+      points_restricted: restrictedMap.get(profile.id) || 0,
     }));
 
     // Get pending access requests

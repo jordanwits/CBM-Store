@@ -10,6 +10,10 @@ export default async function AdminReportsPage() {
   
   let totalIssued = 0;
   let totalRedeemed = 0;
+  let issuedUniversal = 0;
+  let issuedRestricted = 0;
+  let redeemedUniversal = 0;
+  let redeemedRestricted = 0;
   let sortedProducts: [string, number][] = [];
   let averageOrderValue = 0;
   let activeUsersCount = 0;
@@ -17,17 +21,28 @@ export default async function AdminReportsPage() {
   if (!isDevMode) {
     const supabase = await createClient();
 
-    // Run all report queries in parallel for faster loading
-    const [pointsIssuedResult, pointsRedeemedResult, topProductsResult, ordersResult, usersResult] = await Promise.all([
-      supabase.from('points_ledger').select('delta_points').gt('delta_points', 0),
-      supabase.from('points_ledger').select('delta_points').lt('delta_points', 0),
+    const [ledgerResult, topProductsResult, ordersResult, usersResult] = await Promise.all([
+      supabase.from('points_ledger').select('delta_points, point_type'),
       supabase.from('order_items').select('product_name, quantity'),
       supabase.from('orders').select('total_points'),
       supabase.from('profiles').select('*', { count: 'exact', head: true }),
     ]);
 
-    totalIssued = pointsIssuedResult.data?.reduce((sum, entry) => sum + entry.delta_points, 0) || 0;
-    totalRedeemed = Math.abs(pointsRedeemedResult.data?.reduce((sum, entry) => sum + entry.delta_points, 0) || 0);
+    const ledgerRows = ledgerResult.data || [];
+    for (const r of ledgerRows) {
+      const pt = r.point_type === 'restricted' ? 'restricted' : 'universal';
+      const d = r.delta_points;
+      if (d > 0) {
+        if (pt === 'restricted') issuedRestricted += d;
+        else issuedUniversal += d;
+      } else if (d < 0) {
+        const abs = Math.abs(d);
+        if (pt === 'restricted') redeemedRestricted += abs;
+        else redeemedUniversal += abs;
+      }
+    }
+    totalIssued = issuedUniversal + issuedRestricted;
+    totalRedeemed = redeemedUniversal + redeemedRestricted;
     const topProducts = topProductsResult.data;
     const orders = ordersResult.data || [];
     activeUsersCount = usersResult.count || 0;
@@ -84,6 +99,12 @@ export default async function AdminReportsPage() {
               <div>
                 <p className="text-sm text-gray-600 mb-1 font-medium">Points Issued</p>
                 <p className="text-3xl font-bold text-gray-900">{totalIssued.toLocaleString()}</p>
+                {!isDevMode && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Universal {issuedUniversal.toLocaleString()} · CBM points{' '}
+                    {issuedRestricted.toLocaleString()}
+                  </p>
+                )}
               </div>
               <div className="p-3 bg-blue-50 rounded-lg">
                 <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -100,6 +121,12 @@ export default async function AdminReportsPage() {
               <div>
                 <p className="text-sm text-gray-600 mb-1 font-medium">Points Redeemed</p>
                 <p className="text-3xl font-bold text-gray-900">{totalRedeemed.toLocaleString()}</p>
+                {!isDevMode && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Universal {redeemedUniversal.toLocaleString()} · CBM points{' '}
+                    {redeemedRestricted.toLocaleString()}
+                  </p>
+                )}
               </div>
               <div className="p-3 bg-blue-50 rounded-lg">
                 <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -167,6 +194,15 @@ export default async function AdminReportsPage() {
                   {(totalIssued - totalRedeemed).toLocaleString()}
                 </span>
               </div>
+              {!isDevMode && (
+                <div className="flex justify-between py-2 border-b text-xs text-gray-600">
+                  <span>Outstanding (by bucket)</span>
+                  <span className="font-medium text-gray-800">
+                    Universal {(issuedUniversal - redeemedUniversal).toLocaleString()} · CBM points{' '}
+                    {(issuedRestricted - redeemedRestricted).toLocaleString()}
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between py-2 border-b">
                 <span className="text-sm text-gray-600">Average Order Value</span>
                 <span className="text-sm font-semibold text-gray-900">{averageOrderValue.toLocaleString()} pts</span>

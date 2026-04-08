@@ -23,6 +23,7 @@ export default function PointsAdjustmentForm({ isDevMode }: PointsAdjustmentForm
   const [pointsAmount, setPointsAmount] = useState('');
   const [isAdding, setIsAdding] = useState(true);
   const [notifyUser, setNotifyUser] = useState(false);
+  const [pointType, setPointType] = useState<'universal' | 'restricted'>('universal');
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingUsers, setLoadingUsers] = useState(false);
@@ -57,7 +58,7 @@ export default function PointsAdjustmentForm({ isDevMode }: PointsAdjustmentForm
 
     const amount = parseInt(pointsAmount, 10);
     const deltaPoints = isAdding ? amount : -amount;
-    const result = await adjustUserPoints(selectedUserId, deltaPoints, reason, notifyUser);
+    const result = await adjustUserPoints(selectedUserId, deltaPoints, reason, notifyUser, pointType);
 
     setLoading(false);
 
@@ -169,16 +170,31 @@ export default function PointsAdjustmentForm({ isDevMode }: PointsAdjustmentForm
         </div>
       </div>
 
-      <div>
-        <Input
-          label="Reason"
-          type="text"
-          value={reason}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setReason(e.target.value)}
-          disabled={isDevMode || loading}
-          placeholder="e.g., Monthly bonus, Order correction"
-          required
-        />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Point type</label>
+          <select
+            value={pointType}
+            onChange={(e) => setPointType(e.target.value as 'universal' | 'restricted')}
+            disabled={isDevMode || loading}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
+          >
+            <option value="universal">Universal (any product)</option>
+            <option value="restricted">CBM points (Affinity collection only)</option>
+          </select>
+          <p className="text-xs text-gray-600 mt-1">CBM points apply at checkout to Affinity-tagged products first.</p>
+        </div>
+        <div>
+          <Input
+            label="Reason"
+            type="text"
+            value={reason}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setReason(e.target.value)}
+            disabled={isDevMode || loading}
+            placeholder="e.g., Monthly bonus, Order correction"
+            required
+          />
+        </div>
       </div>
 
       <div className="flex items-center gap-2">
