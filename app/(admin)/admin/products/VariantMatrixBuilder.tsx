@@ -5,10 +5,13 @@ import { Button } from 'core/components/Button';
 import { Input } from 'core/components/Input';
 import { Card, CardContent } from 'core/components/Card';
 import { uploadProductImage } from './actions';
+import { sizeOptions, colorOptions } from './variantOptions';
 
 interface Combination {
-  size: string;
-  color: string;
+  // Display name, also used as the variant name
+  label: string;
+  size?: string;
+  color?: string;
   sku?: string;
   price_adjustment_usd: number;
   inventory_count?: number;
@@ -22,32 +25,28 @@ interface VariantMatrixBuilderProps {
   disabled: boolean;
 }
 
-const sizeOptions = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', 'One Size'];
-const colorOptions = [
-  'Black',
-  'White',
-  'Gray',
-  'Blue',
-  'Navy',
-  'Red',
-  'Green',
-  'Yellow',
-  'Orange',
-  'Purple',
-  'Pink',
-  'Brown',
-  'Beige',
-  'Silver',
-  'Gold',
-];
-
 export function VariantMatrixBuilder({ onSave, onCancel, isDevMode, disabled }: VariantMatrixBuilderProps) {
   const [step, setStep] = useState<1 | 2>(1);
   const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
   const [selectedColors, setSelectedColors] = useState<string[]>([]);
+  const [customSizes, setCustomSizes] = useState<string[]>([]);
+  const [customColors, setCustomColors] = useState<string[]>([]);
+  const [customVariants, setCustomVariants] = useState<string[]>([]);
+  const [sizeInput, setSizeInput] = useState('');
+  const [colorInput, setColorInput] = useState('');
+  const [customVariantInput, setCustomVariantInput] = useState('');
   const [colorImages, setColorImages] = useState<Record<string, string>>({});
   const [combinations, setCombinations] = useState<Combination[]>([]);
   const [uploadingColor, setUploadingColor] = useState<string | null>(null);
+
+  const allSizes = [...sizeOptions, ...customSizes];
+  const allColors = [...colorOptions, ...customColors];
+
+  const comboCount =
+    selectedSizes.length && selectedColors.length
+      ? selectedSizes.length * selectedColors.length
+      : selectedSizes.length + selectedColors.length;
+  const totalCount = comboCount + customVariants.length;
 
   const toggleSize = (size: string) => {
     setSelectedSizes(prev =>
@@ -59,6 +58,33 @@ export function VariantMatrixBuilder({ onSave, onCancel, isDevMode, disabled }: 
     setSelectedColors(prev =>
       prev.includes(color) ? prev.filter(c => c !== color) : [...prev, color]
     );
+  };
+
+  const addCustomSize = () => {
+    const value = sizeInput.trim();
+    if (!value) return;
+    if (!allSizes.includes(value)) setCustomSizes(prev => [...prev, value]);
+    if (!selectedSizes.includes(value)) setSelectedSizes(prev => [...prev, value]);
+    setSizeInput('');
+  };
+
+  const addCustomColor = () => {
+    const value = colorInput.trim();
+    if (!value) return;
+    if (!allColors.includes(value)) setCustomColors(prev => [...prev, value]);
+    if (!selectedColors.includes(value)) setSelectedColors(prev => [...prev, value]);
+    setColorInput('');
+  };
+
+  const addCustomVariant = () => {
+    const value = customVariantInput.trim();
+    if (!value) return;
+    if (!customVariants.includes(value)) setCustomVariants(prev => [...prev, value]);
+    setCustomVariantInput('');
+  };
+
+  const removeCustomVariant = (value: string) => {
+    setCustomVariants(prev => prev.filter(v => v !== value));
   };
 
   const handleColorImageUpload = async (color: string, file: File) => {
@@ -76,19 +102,40 @@ export function VariantMatrixBuilder({ onSave, onCancel, isDevMode, disabled }: 
 
   const generateCombinations = () => {
     const combos: Combination[] = [];
-    
-    selectedSizes.forEach(size => {
+
+    if (selectedSizes.length > 0 && selectedColors.length > 0) {
+      selectedSizes.forEach(size => {
+        selectedColors.forEach(color => {
+          combos.push({
+            label: `${size} - ${color}`,
+            size,
+            color,
+            price_adjustment_usd: 0,
+            inventory_count: undefined,
+            image_url: colorImages[color] || undefined,
+          });
+        });
+      });
+    } else if (selectedSizes.length > 0) {
+      selectedSizes.forEach(size => {
+        combos.push({ label: size, size, price_adjustment_usd: 0 });
+      });
+    } else if (selectedColors.length > 0) {
       selectedColors.forEach(color => {
         combos.push({
-          size,
+          label: color,
           color,
           price_adjustment_usd: 0,
-          inventory_count: undefined,
           image_url: colorImages[color] || undefined,
         });
       });
+    }
+
+    // Custom variants stand on their own — they are not multiplied into the matrix
+    customVariants.forEach(name => {
+      combos.push({ label: name, price_adjustment_usd: 0 });
     });
-    
+
     setCombinations(combos);
     setStep(2);
   };
@@ -110,9 +157,10 @@ export function VariantMatrixBuilder({ onSave, onCancel, isDevMode, disabled }: 
       <Card>
         <CardContent className="space-y-6">
           <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Step 1: Select Sizes & Colors</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Step 1: Select Sizes, Colors & Custom Variants</h3>
             <p className="text-sm text-gray-600">
-              Choose which sizes and colors you offer. We'll generate all combinations for you.
+              Choose which sizes and colors you offer. We'll generate all combinations for you. Custom
+              variants are added on their own, not combined with sizes or colors.
             </p>
           </div>
 
@@ -122,7 +170,7 @@ export function VariantMatrixBuilder({ onSave, onCancel, isDevMode, disabled }: 
               Available Sizes {selectedSizes.length > 0 && `(${selectedSizes.length} selected)`}
             </label>
             <div className="flex flex-wrap gap-2">
-              {sizeOptions.map(size => (
+              {allSizes.map(size => (
                 <button
                   key={size}
                   type="button"
@@ -138,6 +186,30 @@ export function VariantMatrixBuilder({ onSave, onCancel, isDevMode, disabled }: 
                 </button>
               ))}
             </div>
+            <div className="flex items-start gap-2 mt-3">
+              <div className="flex-1">
+                <Input
+                  type="text"
+                  value={sizeInput}
+                  onChange={(e) => setSizeInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addCustomSize();
+                    }
+                  }}
+                  disabled={disabled}
+                  placeholder="Add a custom size (e.g., 34x32)"
+                />
+              </div>
+              <Button
+                variant="outline"
+                onClick={addCustomSize}
+                disabled={disabled || !sizeInput.trim()}
+              >
+                Add Size
+              </Button>
+            </div>
           </div>
 
           {/* Colors */}
@@ -146,7 +218,7 @@ export function VariantMatrixBuilder({ onSave, onCancel, isDevMode, disabled }: 
               Available Colors {selectedColors.length > 0 && `(${selectedColors.length} selected)`}
             </label>
             <div className="flex flex-wrap gap-2">
-              {colorOptions.map(color => (
+              {allColors.map(color => (
                 <button
                   key={color}
                   type="button"
@@ -162,6 +234,85 @@ export function VariantMatrixBuilder({ onSave, onCancel, isDevMode, disabled }: 
                 </button>
               ))}
             </div>
+            <div className="flex items-start gap-2 mt-3">
+              <div className="flex-1">
+                <Input
+                  type="text"
+                  value={colorInput}
+                  onChange={(e) => setColorInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addCustomColor();
+                    }
+                  }}
+                  disabled={disabled}
+                  placeholder="Add a custom color (e.g., Forest Green)"
+                />
+              </div>
+              <Button
+                variant="outline"
+                onClick={addCustomColor}
+                disabled={disabled || !colorInput.trim()}
+              >
+                Add Color
+              </Button>
+            </div>
+          </div>
+
+          {/* Custom Variants */}
+          <div>
+            <label className="block text-sm font-medium text-gray-900 mb-3">
+              Custom Variants {customVariants.length > 0 && `(${customVariants.length} added)`}
+            </label>
+            {customVariants.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {customVariants.map(value => (
+                  <span
+                    key={value}
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium bg-primary text-white"
+                  >
+                    {value}
+                    <button
+                      type="button"
+                      onClick={() => removeCustomVariant(value)}
+                      disabled={disabled}
+                      className="text-white/80 hover:text-white"
+                      aria-label={`Remove ${value}`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="flex items-start gap-2">
+              <div className="flex-1">
+                <Input
+                  type="text"
+                  value={customVariantInput}
+                  onChange={(e) => setCustomVariantInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addCustomVariant();
+                    }
+                  }}
+                  disabled={disabled}
+                  placeholder="e.g., Set of 3, Gift Box, Limited Edition"
+                />
+              </div>
+              <Button
+                variant="outline"
+                onClick={addCustomVariant}
+                disabled={disabled || !customVariantInput.trim()}
+              >
+                Add Variant
+              </Button>
+            </div>
+            <p className="text-xs text-gray-600 mt-2">
+              Added as standalone variants — they are not combined with sizes or colors
+            </p>
           </div>
 
           {/* Color Images */}
@@ -202,14 +353,20 @@ export function VariantMatrixBuilder({ onSave, onCancel, isDevMode, disabled }: 
           )}
 
           {/* Summary */}
-          {selectedSizes.length > 0 && selectedColors.length > 0 && (
+          {totalCount > 0 && (
             <div className="bg-primary/5 border border-primary/20 rounded-md p-4">
               <p className="text-sm font-medium text-gray-900">
-                This will create {selectedSizes.length} × {selectedColors.length} ={' '}
-                <span className="text-primary font-bold">{selectedSizes.length * selectedColors.length} combinations</span>
+                This will create <span className="text-primary font-bold">{totalCount} variant{totalCount === 1 ? '' : 's'}</span>
+                {selectedSizes.length > 0 && selectedColors.length > 0 && (
+                  <> ({selectedSizes.length} × {selectedColors.length} = {comboCount} combinations
+                  {customVariants.length > 0 && ` + ${customVariants.length} custom`})</>
+                )}
+                {(selectedSizes.length === 0 || selectedColors.length === 0) && customVariants.length > 0 && comboCount > 0 && (
+                  <> ({comboCount} from sizes/colors + {customVariants.length} custom)</>
+                )}
               </p>
               <p className="text-xs text-gray-600 mt-1">
-                You'll be able to set inventory and pricing for each combination in the next step
+                You'll be able to set inventory and pricing for each one in the next step
               </p>
             </div>
           )}
@@ -221,7 +378,7 @@ export function VariantMatrixBuilder({ onSave, onCancel, isDevMode, disabled }: 
             <Button
               variant="primary"
               onClick={generateCombinations}
-              disabled={disabled || selectedSizes.length === 0 || selectedColors.length === 0}
+              disabled={disabled || totalCount === 0}
             >
               Next: Set Inventory →
             </Button>
@@ -240,7 +397,7 @@ export function VariantMatrixBuilder({ onSave, onCancel, isDevMode, disabled }: 
             Step 2: Set Inventory & Pricing
           </h3>
           <p className="text-sm text-gray-600">
-            Configure inventory and pricing for each size-color combination
+            Configure inventory and pricing for each variant
           </p>
         </div>
 
@@ -249,7 +406,7 @@ export function VariantMatrixBuilder({ onSave, onCancel, isDevMode, disabled }: 
             <thead>
               <tr className="bg-gray-100">
                 <th className="px-4 py-3 text-left text-xs font-bold text-gray-900 uppercase tracking-wider">
-                  Combination
+                  Variant
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-bold text-gray-900 uppercase tracking-wider">
                   SKU
@@ -266,7 +423,7 @@ export function VariantMatrixBuilder({ onSave, onCancel, isDevMode, disabled }: 
               {combinations.map((combo, index) => (
                 <tr key={index} className="hover:bg-gray-50">
                   <td className="px-4 py-3 text-sm font-semibold text-gray-900">
-                    {combo.size} - {combo.color}
+                    {combo.label}
                   </td>
                   <td className="px-4 py-3">
                     <input
@@ -310,11 +467,10 @@ export function VariantMatrixBuilder({ onSave, onCancel, isDevMode, disabled }: 
             ← Back
           </Button>
           <Button variant="primary" onClick={handleSave} disabled={disabled}>
-            Save All Combinations
+            Save All Variants
           </Button>
         </div>
       </CardContent>
     </Card>
   );
 }
-

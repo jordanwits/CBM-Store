@@ -131,7 +131,7 @@ const getProductWithVariantsInternal = cache(async (productId: string) => {
   const [productResult, variantsResult] = await Promise.all([
     supabase
       .from('products')
-      .select('id, name, description, base_usd, images, active, category, collections')
+      .select('id, name, description, base_usd, images, active, category, collections, made_to_order')
       .eq('id', productId)
       .eq('active', true)
       .single(),
@@ -150,7 +150,7 @@ const getProductWithVariantsInternal = cache(async (productId: string) => {
 
 export const getProductWithVariants = unstable_cache(
   async (productId: string) => getProductWithVariantsInternal(productId),
-  ['product-with-variants'],
+  ['product-with-variants', 'v2-made-to-order'],
   {
     revalidate: 300, // 5 minutes
     tags: ['products', 'product-variants'],

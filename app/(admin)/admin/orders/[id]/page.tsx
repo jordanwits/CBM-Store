@@ -199,7 +199,14 @@ export default async function AdminOrderDetailPage({
                 <tbody className="divide-y divide-gray-200">
                   {items.map((item) => (
                     <tr key={item.id}>
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{item.product_name}</td>
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                        {item.product_name}
+                        {item.made_to_order && (
+                          <span className="ml-2 inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-900 align-middle">
+                            Made to Order
+                          </span>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-sm text-gray-800">{item.variant_name || '-'}</td>
                       <td className="px-4 py-3 text-sm text-gray-900">{item.quantity}</td>
                       <td className="px-4 py-3 text-sm text-gray-900">{item.points_per_item}</td>

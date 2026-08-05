@@ -42,6 +42,7 @@ interface AddToCartButtonProps {
   variants: Variant[];
   basePoints: number;
   conversionRate: number;
+  madeToOrder?: boolean;
   onColorChange?: (color: string | undefined) => void;
 }
 
@@ -51,36 +52,61 @@ export default function AddToCartButton({
   variants,
   basePoints,
   conversionRate,
+  madeToOrder = false,
   onColorChange,
 }: AddToCartButtonProps) {
   const [selectedColor, setSelectedColor] = useState<string | undefined>();
   const [selectedSize, setSelectedSize] = useState<string | undefined>();
+  const [selectedOption, setSelectedOption] = useState<string | undefined>();
   const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState(false);
-  
+
   // Notify parent when color changes
   const handleColorChange = (color: string) => {
     setSelectedColor(color);
+    setSelectedOption(undefined);
     if (onColorChange) {
       onColorChange(color);
     }
   };
 
+  const handleSizeChange = (size: string) => {
+    setSelectedSize(size);
+    setSelectedOption(undefined);
+  };
+
+  // Custom variants are standalone, so picking one clears any size/color choice
+  const handleOptionChange = (option: string) => {
+    setSelectedOption(option);
+    setSelectedSize(undefined);
+    setSelectedColor(undefined);
+    if (onColorChange) {
+      onColorChange(undefined);
+    }
+  };
+
   const hasVariants = variants && variants.length > 0;
-  
+
   // Extract unique colors and sizes
-  const availableColors = hasVariants 
+  const availableColors = hasVariants
     ? Array.from(new Set(variants.filter(v => v.color).map(v => v.color!)))
     : [];
   const availableSizes = hasVariants
     ? Array.from(new Set(variants.filter(v => v.size).map(v => v.size!)))
     : [];
-  
+  // Custom variants carry neither a size nor a color — they're picked by name
+  const optionVariants = hasVariants
+    ? variants.filter(v => !v.size && !v.color)
+    : [];
+
   const hasColors = availableColors.length > 0;
   const hasSizes = availableSizes.length > 0;
-  
+  const hasOptions = optionVariants.length > 0;
+
   // Find the matching variant combination
-  const selectedVariant = hasVariants
+  const selectedVariant = selectedOption
+    ? optionVariants.find(v => v.name === selectedOption)
+    : hasVariants
     ? variants.find(v => {
         // For combination variants (both size and color exist in DB)
         if (hasColors && hasSizes) {
@@ -96,17 +122,27 @@ export default function AddToCartButton({
         return false;
       })
     : undefined;
-  
+
   const selectedVariantId = selectedVariant?.id;
   
-  // Check if selected combination is in stock
-  const isOutOfStock = selectedVariant && 
-    selectedVariant.inventory_count !== null && 
-    selectedVariant.inventory_count !== undefined && 
+  // Check if selected combination is in stock. Made-to-order products are procured
+  // per order, so stock never gates them.
+  const isOutOfStock = !madeToOrder &&
+    selectedVariant &&
+    selectedVariant.inventory_count !== null &&
+    selectedVariant.inventory_count !== undefined &&
     selectedVariant.inventory_count < 1;
   
-  const canAddToCart = !hasVariants || 
-    ((!hasColors || selectedColor) && (!hasSizes || selectedSize) && !isOutOfStock);
+  // Every dimension the product offers has a selection
+  const dimensionsSatisfied =
+    (hasColors || hasSizes) &&
+    (!hasColors || !!selectedColor) &&
+    (!hasSizes || !!selectedSize);
+
+  const canAddToCart =
+    !hasVariants ||
+    ((hasOptions ? !!selectedOption || dimensionsSatisfied : dimensionsSatisfied) &&
+      !isOutOfStock);
 
   const handleAddToCart = () => {
     if (!canAddToCart) return;
@@ -136,6 +172,9 @@ export default function AddToCartButton({
     }
     if (!canAddToCart && hasSizes && !selectedSize) {
       return 'Please select a size';
+    }
+    if (!canAddToCart && hasOptions && !selectedOption) {
+      return 'Please select an option';
     }
     return '';
   };
@@ -171,14 +210,33 @@ export default function AddToCartButton({
       {hasColors && (
         <div>
           <label className="block text-sm font-semibold text-gray-900 mb-3">
-            Color {!selectedColor && <span className="text-red-500">*</span>}
+            Color {!selectedColor && !selectedOption && <span className="text-red-500">*</span>}
           </label>
           <div className="flex flex-wrap gap-3">
             {availableColors.map((color) => {
               const isSelected = selectedColor === color;
-              const bgColor = colorMap[color] || color.toLowerCase();
+              const bgColor = colorMap[color];
               const needsBorder = color === 'White' || color === 'Silver' || color === 'Yellow';
-              
+
+              // Custom colors have no swatch to show, so label them instead
+              if (!bgColor) {
+                return (
+                  <button
+                    key={color}
+                    onClick={() => handleColorChange(color)}
+                    className={`px-4 h-12 rounded-full border-2 transition-all font-semibold text-sm ${
+                      isSelected
+                        ? 'border-primary bg-primary text-white shadow-lg scale-105'
+                        : 'border-gray-400 hover:border-gray-600 bg-white text-gray-900'
+                    }`}
+                    title={color}
+                    aria-label={color}
+                  >
+                    {color}
+                  </button>
+                );
+              }
+
               return (
                 <button
                   key={color}
@@ -208,7 +266,7 @@ export default function AddToCartButton({
       {hasSizes && (
         <div>
           <label className="block text-sm font-semibold text-gray-900 mb-3">
-            Size {!selectedSize && <span className="text-red-500">*</span>}
+            Size {!selectedSize && !selectedOption && <span className="text-red-500">*</span>}
           </label>
           <div className="flex flex-wrap gap-3">
             {availableSizes.map((size) => {
@@ -217,8 +275,8 @@ export default function AddToCartButton({
               return (
                 <button
                   key={size}
-                  onClick={() => setSelectedSize(size)}
-                  className={`relative w-12 h-12 rounded-full border-2 transition-all flex items-center justify-center ${
+                  onClick={() => handleSizeChange(size)}
+                  className={`relative h-12 min-w-[3rem] px-3 rounded-full border-2 transition-all flex items-center justify-center ${
                     isSelected
                       ? 'border-primary bg-primary text-white shadow-lg scale-110'
                       : 'border-gray-400 hover:border-gray-600 bg-white text-gray-900'
@@ -240,6 +298,41 @@ export default function AddToCartButton({
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* Custom Variant Selection */}
+      {hasOptions && (
+        <div>
+          <label className="block text-sm font-semibold text-gray-900 mb-3">
+            Options {!selectedOption && (hasColors || hasSizes ? null : <span className="text-red-500">*</span>)}
+          </label>
+          <div className="flex flex-wrap gap-3">
+            {optionVariants.map((variant) => {
+              const isSelected = selectedOption === variant.name;
+
+              return (
+                <button
+                  key={variant.id}
+                  onClick={() => handleOptionChange(variant.name)}
+                  className={`px-4 h-12 rounded-full border-2 transition-all font-semibold text-sm ${
+                    isSelected
+                      ? 'border-primary bg-primary text-white shadow-lg scale-105'
+                      : 'border-gray-400 hover:border-gray-600 bg-white text-gray-900'
+                  }`}
+                  title={variant.name}
+                  aria-label={variant.name}
+                >
+                  {variant.name}
+                </button>
+              );
+            })}
+          </div>
+          {(hasColors || hasSizes) && (
+            <p className="text-xs text-gray-600 mt-2">
+              Choosing an option replaces your size and color selection
+            </p>
+          )}
         </div>
       )}
 
@@ -268,6 +361,16 @@ export default function AddToCartButton({
 
       {/* Price Summary & Add to Cart */}
       <div className="pt-4 border-t space-y-4">
+        {madeToOrder && (
+          <div className="rounded-md bg-primary/5 border border-primary/20 p-3">
+            <p className="text-sm font-semibold text-gray-900">Made to order</p>
+            <p className="text-sm text-gray-700 mt-0.5">
+              This item isn't kept in stock — we'll order it once you place your order. See the
+              product details for lead time.
+            </p>
+          </div>
+        )}
+
         <div className="flex justify-between items-center">
           <span className="text-base font-medium text-gray-700">Subtotal ({quantity} {quantity === 1 ? 'item' : 'items'})</span>
           <span className="text-3xl font-bold text-primary">

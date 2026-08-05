@@ -40,6 +40,7 @@ interface ProductData {
   category?: string;
   collections?: string[];
   images?: string[];
+  made_to_order?: boolean;
 }
 
 export async function createProduct(data: ProductData) {
@@ -70,6 +71,7 @@ export async function createProduct(data: ProductData) {
       category: data.category || null,
       collections: data.collections || [],
       images: data.images || [],
+      made_to_order: data.made_to_order ?? false,
       active: true,
     })
     .select()
@@ -117,6 +119,7 @@ export async function updateProduct(productId: string, data: ProductData) {
       category: data.category || null,
       collections: data.collections || [],
       images: data.images || [],
+      made_to_order: data.made_to_order ?? false,
     })
     .eq('id', productId);
   
@@ -125,11 +128,14 @@ export async function updateProduct(productId: string, data: ProductData) {
     return { success: false, error: 'Failed to update product' };
   }
   
-  // Revalidate relevant pages
+  // Revalidate cache tags and paths — edits change category/collections/made_to_order,
+  // all of which the cached storefront reads depend on
+  revalidateTag('products');
+  revalidateTag('filter-metadata');
   revalidatePath('/admin/products');
   revalidatePath('/dashboard');
   revalidatePath(`/product/${productId}`);
-  
+
   return { success: true };
 }
 
@@ -172,7 +178,8 @@ interface VariantData {
   size?: string;
   color?: string;
   price_adjustment_usd?: number;
-  inventory_count?: number;
+  // null clears the count back to untracked/unlimited; undefined leaves it as-is
+  inventory_count?: number | null;
   image_url?: string;
 }
 
@@ -203,7 +210,8 @@ export async function createVariant(data: VariantData) {
       size: data.size || null,
       color: data.color || null,
       price_adjustment_usd: data.price_adjustment_usd || 0,
-      inventory_count: data.inventory_count || null,
+      // 0 is a real count (out of stock); only an absent value means untracked
+      inventory_count: data.inventory_count ?? null,
       image_url: data.image_url || null,
       active: true,
     })

@@ -6,6 +6,7 @@ import { Input } from 'core/components/Input';
 import { Card, CardContent } from 'core/components/Card';
 import { createVariant, updateVariant, deleteVariant, uploadProductImage } from './actions';
 import { VariantMatrixBuilder } from './VariantMatrixBuilder';
+import { sizeOptions, colorOptions, CUSTOM_VALUE } from './variantOptions';
 
 interface Variant {
   id: string;
@@ -36,6 +37,8 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
   
   // Form state for new/editing variant
   const [variantType, setVariantType] = useState<'size' | 'color' | 'custom'>('size');
+  // True when the size/color is typed in manually rather than picked from the list
+  const [isCustomValue, setIsCustomValue] = useState(false);
   const [formData, setFormData] = useState({
     value: '',
     sku: '',
@@ -44,26 +47,17 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
     image_url: '',
   });
 
-  const sizeOptions = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', 'One Size'];
-  const colorOptions = [
-    'Black',
-    'White',
-    'Gray',
-    'Blue',
-    'Navy',
-    'Red',
-    'Green',
-    'Yellow',
-    'Orange',
-    'Purple',
-    'Pink',
-    'Brown',
-    'Beige',
-    'Silver',
-    'Gold',
-  ];
-
   const canShowImage = variantType === 'color' || variantType === 'custom';
+
+  const handleSelectChange = (selected: string) => {
+    if (selected === CUSTOM_VALUE) {
+      setIsCustomValue(true);
+      setFormData(prev => ({ ...prev, value: '' }));
+    } else {
+      setIsCustomValue(false);
+      setFormData(prev => ({ ...prev, value: selected }));
+    }
+  };
 
   const resetForm = () => {
     setFormData({
@@ -74,6 +68,7 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
       image_url: '',
     });
     setVariantType('size');
+    setIsCustomValue(false);
     setIsAdding(false);
     setEditingId(null);
   };
@@ -92,6 +87,12 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
     }
 
     setVariantType(type);
+    // Values saved before the list was trimmed (or entered manually) aren't in the
+    // dropdown — edit them as custom entries so they aren't silently blanked
+    setIsCustomValue(
+      (type === 'size' && !sizeOptions.includes(value)) ||
+      (type === 'color' && !colorOptions.includes(value))
+    );
     setFormData({
       value: value,
       sku: variant.sku || '',
@@ -137,7 +138,10 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
       name: formData.value.trim(),
       sku: formData.sku.trim() || undefined,
       price_adjustment_usd: parseFloat(formData.price_adjustment_usd) || 0,
-      inventory_count: formData.inventory_count ? parseInt(formData.inventory_count) : undefined,
+      // null (not undefined) so clearing the field actually saves as untracked
+      inventory_count: formData.inventory_count.trim() === ''
+        ? null
+        : parseInt(formData.inventory_count),
     };
 
     // Add size, color, or leave both undefined for custom
@@ -188,8 +192,9 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
   };
 
   const handleMatrixSave = async (combinations: Array<{
-    size: string;
-    color: string;
+    label: string;
+    size?: string;
+    color?: string;
     sku?: string;
     price_adjustment_usd: number;
     inventory_count?: number;
@@ -200,7 +205,7 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
     for (const combo of combinations) {
       await createVariant({
         product_id: productId,
-        name: `${combo.size} - ${combo.color}`,
+        name: combo.label,
         sku: combo.sku,
         size: combo.size,
         color: combo.color,
@@ -211,7 +216,7 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
     }
     setLoading(false);
     setShowMatrix(false);
-    setMessage({ type: 'success', text: `${combinations.length} variant combinations created successfully!` });
+    setMessage({ type: 'success', text: `${combinations.length} variants created successfully!` });
     setTimeout(() => {
       window.location.reload();
     }, 1500);
@@ -329,6 +334,7 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
                   type="button"
                   onClick={() => {
                     setVariantType('size');
+                    setIsCustomValue(false);
                     setFormData({ ...formData, value: '', image_url: '' });
                   }}
                   className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
@@ -344,6 +350,7 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
                   type="button"
                   onClick={() => {
                     setVariantType('color');
+                    setIsCustomValue(false);
                     setFormData({ ...formData, value: '' });
                   }}
                   className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
@@ -359,6 +366,7 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
                   type="button"
                   onClick={() => {
                     setVariantType('custom');
+                    setIsCustomValue(false);
                     setFormData({ ...formData, value: '' });
                   }}
                   className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
@@ -380,8 +388,8 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
                   Size
                 </label>
                 <select
-                  value={formData.value}
-                  onChange={(e) => setFormData({ ...formData, value: e.target.value })}
+                  value={isCustomValue ? CUSTOM_VALUE : formData.value}
+                  onChange={(e) => handleSelectChange(e.target.value)}
                   disabled={isDevMode || disabled || loading}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary disabled:bg-gray-100 disabled:cursor-not-allowed"
                 >
@@ -391,7 +399,19 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
                       {size}
                     </option>
                   ))}
+                  <option value={CUSTOM_VALUE}>Custom size...</option>
                 </select>
+                {isCustomValue && (
+                  <div className="mt-2">
+                    <Input
+                      type="text"
+                      value={formData.value}
+                      onChange={(e) => setFormData({ ...formData, value: e.target.value })}
+                      disabled={isDevMode || disabled || loading}
+                      placeholder="Enter a custom size (e.g., 34x32)"
+                    />
+                  </div>
+                )}
               </div>
             )}
 
@@ -401,8 +421,8 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
                   Color
                 </label>
                 <select
-                  value={formData.value}
-                  onChange={(e) => setFormData({ ...formData, value: e.target.value })}
+                  value={isCustomValue ? CUSTOM_VALUE : formData.value}
+                  onChange={(e) => handleSelectChange(e.target.value)}
                   disabled={isDevMode || disabled || loading}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary disabled:bg-gray-100 disabled:cursor-not-allowed"
                 >
@@ -412,7 +432,19 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
                       {color}
                     </option>
                   ))}
+                  <option value={CUSTOM_VALUE}>Custom color...</option>
                 </select>
+                {isCustomValue && (
+                  <div className="mt-2">
+                    <Input
+                      type="text"
+                      value={formData.value}
+                      onChange={(e) => setFormData({ ...formData, value: e.target.value })}
+                      disabled={isDevMode || disabled || loading}
+                      placeholder="Enter a custom color (e.g., Forest Green)"
+                    />
+                  </div>
+                )}
               </div>
             )}
 
@@ -528,4 +560,3 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
     </Card>
   );
 }
-

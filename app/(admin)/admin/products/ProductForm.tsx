@@ -18,6 +18,7 @@ interface ProductFormProps {
     category?: string;
     collections?: string[];
     images?: string[];
+    made_to_order?: boolean;
   };
   isDevMode: boolean;
 }
@@ -36,6 +37,7 @@ export function ProductForm({ mode, productId, initialData, isDevMode }: Product
   const [category, setCategory] = useState(initialData?.category || '');
   const [selectedCollections, setSelectedCollections] = useState<string[]>(initialData?.collections || []);
   const [imagesInput, setImagesInput] = useState(initialData?.images?.join('\n') || '');
+  const [madeToOrder, setMadeToOrder] = useState(initialData?.made_to_order ?? false);
   
   // Variant state for creation mode
   const [pendingVariants, setPendingVariants] = useState<Array<{
@@ -130,6 +132,7 @@ export function ProductForm({ mode, productId, initialData, isDevMode }: Product
       category: category || undefined,
       collections: selectedCollections.length > 0 ? selectedCollections : undefined,
       images: images.length > 0 ? images : undefined,
+      made_to_order: madeToOrder,
     };
 
     let result;
@@ -211,6 +214,29 @@ export function ProductForm({ mode, productId, initialData, isDevMode }: Product
             placeholder="25.00"
             required
           />
+
+          <div className="pt-2 border-t">
+            <label className="flex items-start gap-3 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={madeToOrder}
+                onChange={(e) => setMadeToOrder(e.target.checked)}
+                disabled={isDevMode || loading}
+                className="mt-0.5 w-4 h-4 rounded border-gray-300 focus:ring-2 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
+                style={{ accentColor: 'var(--primary)' }}
+              />
+              <span>
+                <span className={`text-sm font-medium ${isDevMode || loading ? 'text-gray-400' : 'text-gray-900 group-hover:text-gray-900'}`}>
+                  Made to Order
+                </span>
+                <span className="block text-xs text-gray-600 mt-0.5">
+                  Not kept in stock. Customers can order it no matter what inventory says, variant
+                  counts are left untouched, and the order line is flagged so your team knows to
+                  procure it. Put the lead time in the description.
+                </span>
+              </span>
+            </label>
+          </div>
         </CardContent>
       </Card>
 
@@ -419,4 +445,3 @@ export function ProductForm({ mode, productId, initialData, isDevMode }: Product
     </form>
   );
 }
-

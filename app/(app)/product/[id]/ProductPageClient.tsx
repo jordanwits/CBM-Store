@@ -50,7 +50,11 @@ export default function ProductPageClient({
             <span className="text-lg text-gray-600">points</span>
           </div>
 
-          <Badge variant="secondary">In Stock</Badge>
+          {product.made_to_order ? (
+            <Badge variant="primary">Made to Order</Badge>
+          ) : (
+            <Badge variant="secondary">In Stock</Badge>
+          )}
         </div>
 
         <Card className="mb-6">
@@ -61,7 +65,7 @@ export default function ProductPageClient({
               </svg>
               Product Details
             </h2>
-            <p className="text-gray-700 leading-relaxed">{product.description}</p>
+            <p className="text-gray-700 leading-relaxed whitespace-pre-line">{product.description}</p>
           </CardContent>
         </Card>
 
@@ -71,6 +75,7 @@ export default function ProductPageClient({
           variants={variants}
           basePoints={basePoints}
           conversionRate={conversionRate}
+          madeToOrder={product.made_to_order ?? false}
           onColorChange={setSelectedColor}
         />
       </div>

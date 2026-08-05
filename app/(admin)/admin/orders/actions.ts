@@ -218,12 +218,13 @@ export async function refundOrder(
   if (options.withReturn) {
     const { data: items } = await supabase
       .from('order_items')
-      .select('variant_id, quantity')
+      .select('variant_id, quantity, made_to_order')
       .eq('order_id', orderId);
 
     if (items && items.length > 0) {
       for (const item of items) {
-        if (item.variant_id) {
+        // Made-to-order lines never decremented stock, so returning one must not add any
+        if (item.variant_id && !item.made_to_order) {
           const { data: variant } = await supabase
             .from('product_variants')
             .select('inventory_count')
