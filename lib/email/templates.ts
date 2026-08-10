@@ -1,5 +1,6 @@
 import { getSiteUrl } from './resend';
 import { getTrackingUrl } from '@/lib/tracking';
+import { orderStatusLabel } from '@/lib/orders/status';
 
 interface OrderData {
   orderId: string;
@@ -148,15 +149,15 @@ export function customerOrderStatusEmail(order: OrderStatusData) {
   const siteUrl = getSiteUrl();
   const orderUrl = `${siteUrl}/orders/${order.orderId}`;
   
-  const statusText = order.status.charAt(0).toUpperCase() + order.status.slice(1);
-  const subject = `Order ${statusText} - #${order.orderNumber}`;
-  
+  const statusText = orderStatusLabel(order.status);
+  const subject = `Order #${order.orderNumber} - ${statusText}`;
+
   const statusMessages: Record<string, string> = {
-    processing: 'Your order is being prepared.',
+    processing: 'Your order is being prepared for pickup.',
     shipped: order.trackingNumber
-      ? `Update: reference ${order.trackingNumber}. See your order page for details.`
-      : 'Your order has an update. Please check your order page for pickup details.',
-    delivered: 'Your order is complete. Thank you!',
+      ? `Your order is ready for pickup. Reference: ${order.trackingNumber}`
+      : 'Your order is ready for pickup at our location.',
+    delivered: 'Your pickup is complete. We hope you enjoy your items!',
     cancelled: 'Your order has been cancelled. If you have questions, please contact support.',
   };
   
@@ -208,7 +209,7 @@ export function adminOrderStatusEmail(order: OrderStatusData) {
   const siteUrl = getSiteUrl();
   const orderUrl = `${siteUrl}/admin/orders/${order.orderId}`;
   
-  const statusText = order.status.charAt(0).toUpperCase() + order.status.slice(1);
+  const statusText = orderStatusLabel(order.status);
   const subject = `Order Status Updated - #${order.orderNumber}`;
   
   const html = `

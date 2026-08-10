@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { Card, CardHeader, CardContent } from 'core/components/Card';
 import { BackButton } from 'core/components/BackButton';
 import { FormattedDate } from 'core/components/FormattedDate';
+import { orderStatusLabel, orderStatusPillClasses } from '@/lib/orders/status';
 import { notFound } from 'next/navigation';
 import { OrderStatusEditor } from './OrderStatusEditor';
 import { OrderActions } from './OrderActions';
@@ -117,17 +118,9 @@ export default async function AdminOrderDetailPage({
               <div>
                 <p className="text-sm text-gray-700 font-medium">Current Status</p>
                 <span
-                  className={`inline-block mt-1 px-3 py-1 rounded-full text-sm font-medium ${
-                    order.status === 'delivered'
-                      ? 'bg-green-100 text-green-900'
-                      : order.status === 'shipped'
-                      ? 'bg-purple-100 text-purple-900'
-                      : order.status === 'processing'
-                      ? 'bg-blue-100 text-blue-900'
-                      : 'bg-yellow-100 text-yellow-900'
-                  }`}
+                  className={`inline-block mt-1 px-3 py-1 rounded-full text-sm font-medium ${orderStatusPillClasses(order.status)}`}
                 >
-                  {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                  {orderStatusLabel(order.status)}
                 </span>
               </div>
               {order.tracking_number && (

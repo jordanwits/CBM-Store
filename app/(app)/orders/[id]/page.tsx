@@ -12,6 +12,7 @@ import Image from 'next/image';
 import { PrintOrderButton, EmailSupportButton, CallSupportButton } from './OrderActions';
 import { getTrackingUrl } from '@/lib/tracking';
 import { cbmBranding } from '@/branding';
+import { orderStatusLabel, orderStatusBadgeVariant } from '@/lib/orders/status';
 
 export default async function OrderDetailPage({
   params,
@@ -113,16 +114,6 @@ export default async function OrderDetailPage({
     }));
   }
 
-  const getStatusVariant = (status: string) => {
-    switch (status) {
-      case 'completed': return 'success';
-      case 'ready': return 'info';
-      case 'processing': return 'warning';
-      case 'pending': return 'default';
-      default: return 'default';
-    }
-  };
-
   return (
     <div>
       {/* Back Button and Breadcrumb */}
@@ -150,8 +141,8 @@ export default async function OrderDetailPage({
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <Badge variant={getStatusVariant(order.status)} size="lg" className="px-4 py-2">
-            {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+          <Badge variant={orderStatusBadgeVariant(order.status)} size="lg" className="px-4 py-2">
+            {orderStatusLabel(order.status)}
           </Badge>
           <PrintOrderButton />
         </div>

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from 'core/components/Button';
 import { Input } from 'core/components/Input';
 import { updateOrderStatus } from '../actions';
+import { ORDER_STATUS_OPTIONS } from '@/lib/orders/status';
 
 interface OrderStatusEditorProps {
   orderId: string;
@@ -14,13 +15,7 @@ interface OrderStatusEditorProps {
   isDevMode: boolean;
 }
 
-const STATUS_OPTIONS = [
-  { value: 'new', label: 'New', color: 'yellow' },
-  { value: 'processing', label: 'Processing', color: 'blue' },
-  { value: 'shipped', label: 'Shipped', color: 'purple' },
-  { value: 'delivered', label: 'Delivered', color: 'green' },
-  { value: 'cancelled', label: 'Cancelled', color: 'red' },
-];
+const STATUS_OPTIONS = ORDER_STATUS_OPTIONS;
 
 export function OrderStatusEditor({ 
   orderId, 
