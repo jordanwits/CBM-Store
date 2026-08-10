@@ -72,12 +72,14 @@ export function generateOrderItemsCsv(orderItems: any[]): string {
     'variant_id',
     'product_name',
     'variant_name',
+    'variant_size',
+    'variant_color',
     'quantity',
     'points_per_item',
     'total_points',
     'created_at',
   ];
-  
+
   return arrayToCsv(orderItems, headers);
 }
 

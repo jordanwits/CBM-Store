@@ -183,7 +183,10 @@ export default async function AdminOrderDetailPage({
                       Product
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-900 uppercase bg-gray-50">
-                      Variant
+                      Size
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-900 uppercase bg-gray-50">
+                      Color
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-900 uppercase bg-gray-50">
                       Qty
@@ -206,8 +209,15 @@ export default async function AdminOrderDetailPage({
                             Made to Order
                           </span>
                         )}
+                        {/* A variant with neither dimension carries its meaning in the name alone */}
+                        {!item.variant_size && !item.variant_color && item.variant_name && (
+                          <span className="block text-xs font-normal text-gray-700 mt-0.5">
+                            {item.variant_name}
+                          </span>
+                        )}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-800">{item.variant_name || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-800">{item.variant_size || '—'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-800">{item.variant_color || '—'}</td>
                       <td className="px-4 py-3 text-sm text-gray-900">{item.quantity}</td>
                       <td className="px-4 py-3 text-sm text-gray-900">{item.points_per_item}</td>
                       <td className="px-4 py-3 text-sm font-semibold text-gray-900">{item.total_points}</td>

@@ -36,65 +36,81 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   
   // Form state for new/editing variant
-  const [variantType, setVariantType] = useState<'size' | 'color' | 'custom'>('size');
+  const [variantType, setVariantType] = useState<'sizecolor' | 'custom'>('sizecolor');
   // True when the size/color is typed in manually rather than picked from the list
-  const [isCustomValue, setIsCustomValue] = useState(false);
+  const [isCustomSize, setIsCustomSize] = useState(false);
+  const [isCustomColor, setIsCustomColor] = useState(false);
   const [formData, setFormData] = useState({
     value: '',
+    size: '',
+    color: '',
     sku: '',
     price_adjustment_usd: '0',
     inventory_count: '',
     image_url: '',
   });
 
-  const canShowImage = variantType === 'color' || variantType === 'custom';
+  // Built the same way the matrix builder names its combinations, so a variant added
+  // here and one generated there read identically on the fulfillment page
+  const derivedName =
+    variantType === 'custom'
+      ? formData.value.trim()
+      : [formData.size.trim(), formData.color.trim()].filter(Boolean).join(' - ');
 
-  const handleSelectChange = (selected: string) => {
+  const canShowImage = variantType === 'custom' || !!formData.color.trim();
+
+  const handleSizeSelect = (selected: string) => {
     if (selected === CUSTOM_VALUE) {
-      setIsCustomValue(true);
-      setFormData(prev => ({ ...prev, value: '' }));
+      setIsCustomSize(true);
+      setFormData(prev => ({ ...prev, size: '' }));
     } else {
-      setIsCustomValue(false);
-      setFormData(prev => ({ ...prev, value: selected }));
+      setIsCustomSize(false);
+      setFormData(prev => ({ ...prev, size: selected }));
+    }
+  };
+
+  const handleColorSelect = (selected: string) => {
+    if (selected === CUSTOM_VALUE) {
+      setIsCustomColor(true);
+      setFormData(prev => ({ ...prev, color: '' }));
+    } else {
+      setIsCustomColor(false);
+      setFormData(prev => ({ ...prev, color: selected }));
     }
   };
 
   const resetForm = () => {
     setFormData({
       value: '',
+      size: '',
+      color: '',
       sku: '',
       price_adjustment_usd: '0',
       inventory_count: '',
       image_url: '',
     });
-    setVariantType('size');
-    setIsCustomValue(false);
+    setVariantType('sizecolor');
+    setIsCustomSize(false);
+    setIsCustomColor(false);
     setIsAdding(false);
     setEditingId(null);
   };
 
   const handleEdit = (variant: Variant) => {
-    // Determine variant type from the variant data
-    let type: 'size' | 'color' | 'custom' = 'custom';
-    let value = variant.name;
-
-    if (variant.size) {
-      type = 'size';
-      value = variant.size;
-    } else if (variant.color) {
-      type = 'color';
-      value = variant.color;
-    }
+    const size = variant.size || '';
+    const color = variant.color || '';
+    // A variant carrying neither dimension is a standalone entry named by hand
+    const type: 'sizecolor' | 'custom' = size || color ? 'sizecolor' : 'custom';
 
     setVariantType(type);
     // Values saved before the list was trimmed (or entered manually) aren't in the
     // dropdown — edit them as custom entries so they aren't silently blanked
-    setIsCustomValue(
-      (type === 'size' && !sizeOptions.includes(value)) ||
-      (type === 'color' && !colorOptions.includes(value))
-    );
+    setIsCustomSize(!!size && !sizeOptions.includes(size));
+    setIsCustomColor(!!color && !colorOptions.includes(color));
     setFormData({
-      value: value,
+      value: type === 'custom' ? variant.name : '',
+      size,
+      color,
       sku: variant.sku || '',
       price_adjustment_usd: variant.price_adjustment_usd.toString(),
       inventory_count: variant.inventory_count?.toString() || '',
@@ -125,18 +141,27 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
   };
 
   const handleSave = async () => {
-    if (!formData.value.trim()) {
-      setMessage({ type: 'error', text: 'Please select or enter a variant value' });
+    if (!derivedName) {
+      setMessage({
+        type: 'error',
+        text: variantType === 'custom'
+          ? 'Please enter a variant name'
+          : 'Please choose a size, a color, or both',
+      });
       return;
     }
 
     setLoading(true);
     setMessage(null);
 
+    // Both dimensions go on every save — sending only the one that changed leaves a
+    // stale value behind when a variant is edited from, say, colored to size-only
     const variantData: any = {
       product_id: productId,
-      name: formData.value.trim(),
+      name: derivedName,
       sku: formData.sku.trim() || undefined,
+      size: variantType === 'custom' ? '' : formData.size.trim(),
+      color: variantType === 'custom' ? '' : formData.color.trim(),
       price_adjustment_usd: parseFloat(formData.price_adjustment_usd) || 0,
       // null (not undefined) so clearing the field actually saves as untracked
       inventory_count: formData.inventory_count.trim() === ''
@@ -144,15 +169,8 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
         : parseInt(formData.inventory_count),
     };
 
-    // Add size, color, or leave both undefined for custom
-    if (variantType === 'size') {
-      variantData.size = formData.value.trim();
-    } else if (variantType === 'color') {
-      variantData.color = formData.value.trim();
-      variantData.image_url = formData.image_url.trim() || undefined;
-    } else {
-      // custom variant - no size or color
-      variantData.image_url = formData.image_url.trim() || undefined;
+    if (canShowImage) {
+      variantData.image_url = formData.image_url.trim();
     }
 
     let result;
@@ -321,7 +339,9 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
               <h3 className="font-semibold text-gray-900">
                 {editingId ? 'Edit Variant' : 'Add Variant'}
               </h3>
-              <p className="text-sm text-gray-600 mt-1">Add size, color, or custom variants separately</p>
+              <p className="text-sm text-gray-600 mt-1">
+                Set a size, a color, or both. Fulfillment sees whichever you fill in.
+              </p>
             </div>
 
             {/* Variant Type Selector */}
@@ -333,41 +353,25 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
                 <button
                   type="button"
                   onClick={() => {
-                    setVariantType('size');
-                    setIsCustomValue(false);
-                    setFormData({ ...formData, value: '', image_url: '' });
-                  }}
-                  className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                    variantType === 'size'
-                      ? 'bg-primary text-white'
-                      : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                  }`}
-                  disabled={isDevMode || disabled || loading}
-                >
-                  Size
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setVariantType('color');
-                    setIsCustomValue(false);
+                    setVariantType('sizecolor');
                     setFormData({ ...formData, value: '' });
                   }}
                   className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                    variantType === 'color'
+                    variantType === 'sizecolor'
                       ? 'bg-primary text-white'
                       : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
                   }`}
                   disabled={isDevMode || disabled || loading}
                 >
-                  Color
+                  Size / Color
                 </button>
                 <button
                   type="button"
                   onClick={() => {
                     setVariantType('custom');
-                    setIsCustomValue(false);
-                    setFormData({ ...formData, value: '' });
+                    setIsCustomSize(false);
+                    setIsCustomColor(false);
+                    setFormData({ ...formData, size: '', color: '' });
                   }}
                   className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                     variantType === 'custom'
@@ -382,69 +386,78 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
             </div>
 
             {/* Variant Value Input */}
-            {variantType === 'size' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Size
-                </label>
-                <select
-                  value={isCustomValue ? CUSTOM_VALUE : formData.value}
-                  onChange={(e) => handleSelectChange(e.target.value)}
-                  disabled={isDevMode || disabled || loading}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary disabled:bg-gray-100 disabled:cursor-not-allowed"
-                >
-                  <option value="">Select size</option>
-                  {sizeOptions.map((size) => (
-                    <option key={size} value={size}>
-                      {size}
-                    </option>
-                  ))}
-                  <option value={CUSTOM_VALUE}>Custom size...</option>
-                </select>
-                {isCustomValue && (
-                  <div className="mt-2">
-                    <Input
-                      type="text"
-                      value={formData.value}
-                      onChange={(e) => setFormData({ ...formData, value: e.target.value })}
-                      disabled={isDevMode || disabled || loading}
-                      placeholder="Enter a custom size (e.g., 34x32)"
-                    />
-                  </div>
-                )}
-              </div>
-            )}
+            {variantType === 'sizecolor' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Size <span className="font-normal text-gray-500">(optional)</span>
+                  </label>
+                  <select
+                    value={isCustomSize ? CUSTOM_VALUE : formData.size}
+                    onChange={(e) => handleSizeSelect(e.target.value)}
+                    disabled={isDevMode || disabled || loading}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  >
+                    <option value="">No size</option>
+                    {sizeOptions.map((size) => (
+                      <option key={size} value={size}>
+                        {size}
+                      </option>
+                    ))}
+                    <option value={CUSTOM_VALUE}>Custom size...</option>
+                  </select>
+                  {isCustomSize && (
+                    <div className="mt-2">
+                      <Input
+                        type="text"
+                        value={formData.size}
+                        onChange={(e) => setFormData({ ...formData, size: e.target.value })}
+                        disabled={isDevMode || disabled || loading}
+                        placeholder="Enter a custom size (e.g., 34x32)"
+                      />
+                    </div>
+                  )}
+                </div>
 
-            {variantType === 'color' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Color
-                </label>
-                <select
-                  value={isCustomValue ? CUSTOM_VALUE : formData.value}
-                  onChange={(e) => handleSelectChange(e.target.value)}
-                  disabled={isDevMode || disabled || loading}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary disabled:bg-gray-100 disabled:cursor-not-allowed"
-                >
-                  <option value="">Select color</option>
-                  {colorOptions.map((color) => (
-                    <option key={color} value={color}>
-                      {color}
-                    </option>
-                  ))}
-                  <option value={CUSTOM_VALUE}>Custom color...</option>
-                </select>
-                {isCustomValue && (
-                  <div className="mt-2">
-                    <Input
-                      type="text"
-                      value={formData.value}
-                      onChange={(e) => setFormData({ ...formData, value: e.target.value })}
-                      disabled={isDevMode || disabled || loading}
-                      placeholder="Enter a custom color (e.g., Forest Green)"
-                    />
-                  </div>
-                )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Color <span className="font-normal text-gray-500">(optional)</span>
+                  </label>
+                  <select
+                    value={isCustomColor ? CUSTOM_VALUE : formData.color}
+                    onChange={(e) => handleColorSelect(e.target.value)}
+                    disabled={isDevMode || disabled || loading}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  >
+                    <option value="">No color</option>
+                    {colorOptions.map((color) => (
+                      <option key={color} value={color}>
+                        {color}
+                      </option>
+                    ))}
+                    <option value={CUSTOM_VALUE}>Custom color...</option>
+                  </select>
+                  {isCustomColor && (
+                    <div className="mt-2">
+                      <Input
+                        type="text"
+                        value={formData.color}
+                        onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                        disabled={isDevMode || disabled || loading}
+                        placeholder="Enter a custom color (e.g., Forest Green)"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div className="sm:col-span-2">
+                  <p className="text-sm text-gray-600">
+                    Saves as:{' '}
+                    <span className="font-medium text-gray-900">
+                      {derivedName || '—'}
+                    </span>
+                  </p>
+                </div>
               </div>
             )}
 
@@ -493,7 +506,7 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
             {canShowImage && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Variant Image {variantType === 'color' ? '(Recommended)' : '(Optional)'}
+                  Variant Image {variantType === 'custom' ? '(Optional)' : '(Recommended)'}
                 </label>
                 <div className="space-y-2">
                   <input
@@ -512,7 +525,9 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
                     placeholder="https://..."
                   />
                   <p className="text-xs text-gray-600">
-                    Upload an image showing this specific {variantType}
+                    {variantType === 'custom'
+                      ? 'Upload an image showing this specific variant'
+                      : `Upload an image showing this product in ${formData.color.trim()}`}
                   </p>
                 </div>
               </div>
@@ -529,7 +544,7 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
               <Button
                 variant="primary"
                 onClick={handleSave}
-                disabled={isDevMode || disabled || loading || !formData.value.trim()}
+                disabled={isDevMode || disabled || loading || !derivedName}
               >
                 {loading ? 'Saving...' : (editingId ? 'Update Variant' : 'Save Variant')}
               </Button>

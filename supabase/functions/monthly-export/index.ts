@@ -60,7 +60,7 @@ function generateOrdersCsv(orders: any[]): string {
 function generateOrderItemsCsv(orderItems: any[]): string {
   const headers = [
     'id', 'order_id', 'product_id', 'variant_id',
-    'product_name', 'variant_name', 'quantity',
+    'product_name', 'variant_name', 'variant_size', 'variant_color', 'quantity',
     'points_per_item', 'total_points', 'created_at',
   ];
   return arrayToCsv(orderItems, headers);
