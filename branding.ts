@@ -15,5 +15,10 @@ export const cbmBranding: BrandingConfig = {
     secondary: '#00467F',
     secondaryForeground: '#ffffff',
   },
+  support: {
+    email: 'orders@cbmplasticsusa.com',
+    phone: '217-543-3870',
+    phoneDial: '+12175433870',
+  },
   domain: 'cbm-plastics',
 };

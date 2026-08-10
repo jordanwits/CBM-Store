@@ -9,8 +9,9 @@ import { FormattedDate } from 'core/components/FormattedDate';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { PrintOrderButton, ContactSupportButton } from './OrderActions';
+import { PrintOrderButton, EmailSupportButton, CallSupportButton } from './OrderActions';
 import { getTrackingUrl } from '@/lib/tracking';
+import { cbmBranding } from '@/branding';
 
 export default async function OrderDetailPage({
   params,
@@ -90,16 +91,26 @@ export default async function OrderDetailPage({
         .single(),
       supabase
         .from('order_items')
-        .select('id, order_id, product_id, product_name, product_image, variant_name, quantity, points_per_item, total_points')
+        .select(
+          'id, order_id, product_id, product_name, variant_name, quantity, points_per_item, total_points, products(images)'
+        )
         .eq('order_id', id),
     ]);
 
     if (!orderResult.data) {
       notFound();
     }
-    
+
+    if (itemsResult.error) {
+      // Without this the page silently renders "0 products" for a real order
+      console.error('Failed to load order items', itemsResult.error);
+    }
+
     order = orderResult.data;
-    items = itemsResult.data || [];
+    items = (itemsResult.data || []).map((item: any) => ({
+      ...item,
+      product_image: item.products?.images?.[0] ?? null,
+    }));
   }
 
   const getStatusVariant = (status: string) => {
@@ -368,9 +379,11 @@ export default async function OrderDetailPage({
             <h3 className="text-2xl font-bold text-gray-900 mb-2">Need Help with Your Order?</h3>
             <p className="text-gray-600 mb-6">
               Our support team is here to help with any questions about your order or pickup.
+              Reach us at {cbmBranding.support?.email} or {cbmBranding.support?.phone}.
             </p>
-            <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <ContactSupportButton />
+            <div className="flex flex-col sm:flex-row flex-wrap gap-3 justify-center">
+              <EmailSupportButton orderNumber={order.id.slice(0, 8).toUpperCase()} />
+              <CallSupportButton />
               <Link href="/orders">
                 <Button variant="outline" size="lg">
                   <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">

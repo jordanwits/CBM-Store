@@ -17,6 +17,14 @@ export interface BrandingConfig {
     secondary: string;
     secondaryForeground: string;
   };
+  /** Where customers reach a human about an order. Omitted fields hide their button. */
+  support?: {
+    email?: string;
+    /** Display form, e.g. "217-543-3870" */
+    phone?: string;
+    /** Dial form for tel: links, e.g. "+12175433870". Falls back to phone. */
+    phoneDial?: string;
+  };
   domain?: string;
 }
 
