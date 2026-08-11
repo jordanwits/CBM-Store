@@ -99,5 +99,50 @@ export function getAdminEmails(): string[] {
 }
 
 export function getSiteUrl(): string {
-  return process.env.NEXT_PUBLIC_SITE_URL || 'https://www.cbmshop.com';
+  const fallback = 'https://www.cbmshop.com';
+
+  const parse = (raw: string): URL | null => {
+    const trimmed = raw.trim();
+    if (!trimmed.length) return null;
+    try {
+      // Allow passing "example.com" (no protocol) in env vars.
+      return new URL(/^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
+    } catch {
+      return null;
+    }
+  };
+
+  const normalize = (url: URL): string =>
+    // Remove trailing slash for consistent URL joining.
+    `${url.protocol}//${url.host}${url.pathname}`.replace(/\/+$/, '');
+
+  // A localhost value copied from a local .env sends customers to their own
+  // machine, so it can never be trusted once we're running in production.
+  const isLocalHost = (url: URL): boolean =>
+    url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+
+  // Vercel's own hostnames sit behind deployment protection, so a customer
+  // following a link to one lands on a Vercel login screen instead of the store.
+  const isVercelHost = (url: URL): boolean =>
+    url.hostname === 'vercel.app' || url.hostname.endsWith('.vercel.app');
+
+  const isProd = process.env.NODE_ENV === 'production';
+
+  const candidates = [
+    process.env.NEXT_PUBLIC_SITE_URL,
+    // Vercel's stable production alias — only usable once a custom domain is
+    // attached to the project, which the isVercelHost check enforces.
+    process.env.VERCEL_PROJECT_PRODUCTION_URL,
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const url = parse(candidate);
+    if (!url) continue;
+    if (isVercelHost(url)) continue;
+    if (isProd && isLocalHost(url)) continue;
+    return normalize(url);
+  }
+
+  return fallback;
 }
