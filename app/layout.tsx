@@ -24,7 +24,7 @@ export const metadata: Metadata = {
   title: `${cbmBranding.appName} - Rewards Merch Shop`,
   description: `Redeem your points for branded merchandise at ${cbmBranding.appName}`,
   // Performance optimizations
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://cbmplasticsstore.com'),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://www.cbmshop.com'),
   icons: {
     icon: '/cbmFavicon.png?v=3',
   },
