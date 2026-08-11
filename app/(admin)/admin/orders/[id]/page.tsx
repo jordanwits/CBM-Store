@@ -3,6 +3,7 @@ import { Card, CardHeader, CardContent } from 'core/components/Card';
 import { BackButton } from 'core/components/BackButton';
 import { FormattedDate } from 'core/components/FormattedDate';
 import { orderStatusLabel, orderStatusPillClasses } from '@/lib/orders/status';
+import { orderItemProcurement } from '@/lib/orders/fulfillment';
 import { notFound } from 'next/navigation';
 import { OrderStatusEditor } from './OrderStatusEditor';
 import { OrderActions } from './OrderActions';
@@ -193,29 +194,37 @@ export default async function AdminOrderDetailPage({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {items.map((item) => (
-                    <tr key={item.id}>
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                        {item.product_name}
-                        {item.made_to_order && (
-                          <span className="ml-2 inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-900 align-middle">
-                            Made to Order
-                          </span>
-                        )}
-                        {/* A variant with neither dimension carries its meaning in the name alone */}
-                        {!item.variant_size && !item.variant_color && item.variant_name && (
-                          <span className="block text-xs font-normal text-gray-700 mt-0.5">
-                            {item.variant_name}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-800">{item.variant_size || '—'}</td>
-                      <td className="px-4 py-3 text-sm text-gray-800">{item.variant_color || '—'}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900">{item.quantity}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900">{item.points_per_item}</td>
-                      <td className="px-4 py-3 text-sm font-semibold text-gray-900">{item.total_points}</td>
-                    </tr>
-                  ))}
+                  {items.map((item) => {
+                    const procurement = orderItemProcurement(item);
+
+                    return (
+                      <tr key={item.id}>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                          {item.product_name}
+                          {procurement && (
+                            <span
+                              className={`ml-2 inline-block px-2 py-0.5 rounded-full text-xs font-medium align-middle ${procurement.pillClasses}`}
+                            >
+                              {procurement.label}
+                            </span>
+                          )}
+                          {/* A variant with neither dimension carries its meaning in the name alone */}
+                          {!item.variant_size && !item.variant_color && item.variant_name && (
+                            <span className="block text-xs font-normal text-gray-700 mt-0.5">
+                              {item.variant_name}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-800">{item.variant_size || '—'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-800">{item.variant_color || '—'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900">{item.quantity}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900">{item.points_per_item}</td>
+                        <td className="px-4 py-3 text-sm font-semibold text-gray-900">
+                          {item.total_points}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

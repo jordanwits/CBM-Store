@@ -3,6 +3,8 @@
  * Handles conversion of database records to CSV format with proper escaping
  */
 
+import { unitsToMake } from '@/lib/orders/fulfillment';
+
 /**
  * Escape a CSV field value
  * Handles quotes, commas, and newlines
@@ -75,12 +77,23 @@ export function generateOrderItemsCsv(orderItems: any[]): string {
     'variant_size',
     'variant_color',
     'quantity',
+    'units_from_stock',
+    'units_to_make',
+    'made_to_order',
     'points_per_item',
     'total_points',
     'created_at',
   ];
 
-  return arrayToCsv(orderItems, headers);
+  // units_to_make is the one column here nobody can work out at a glance, since a
+  // made-to-order line can be partly pulled from stock. Derived at export time from the
+  // same rule the admin order table uses, so the CSV and the screen cannot disagree.
+  const rows = orderItems.map((item) => ({
+    ...item,
+    units_to_make: unitsToMake(item),
+  }));
+
+  return arrayToCsv(rows, headers);
 }
 
 /**

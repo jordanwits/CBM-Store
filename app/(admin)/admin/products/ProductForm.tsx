@@ -230,9 +230,9 @@ export function ProductForm({ mode, productId, initialData, isDevMode }: Product
                   Made to Order
                 </span>
                 <span className="block text-xs text-gray-600 mt-0.5">
-                  Not kept in stock. Customers can order it no matter what inventory says, variant
-                  counts are left untouched, and the order line is flagged so your team knows to
-                  procure it. Put the lead time in the description.
+                  Customers can order it no matter what inventory says. Any stock you have recorded
+                  on a variant is sold first, and whatever the order needs beyond that is flagged so
+                  your team knows to procure it. Put the lead time in the description.
                 </span>
               </span>
             </label>

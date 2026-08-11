@@ -125,14 +125,21 @@ export default function AddToCartButton({
 
   const selectedVariantId = selectedVariant?.id;
   
-  // Check if selected combination is in stock. Made-to-order products are procured
-  // per order, so stock never gates them.
+  // Check if selected combination is in stock. Made-to-order products get made when stock
+  // runs out, so stock never gates them.
   const isOutOfStock = !madeToOrder &&
     selectedVariant &&
     selectedVariant.inventory_count !== null &&
     selectedVariant.inventory_count !== undefined &&
     selectedVariant.inventory_count < 1;
-  
+
+  // How much of this selection would have to be made rather than pulled off the shelf.
+  // Made-to-order sells from stock first, so a selection covered by what is on hand needs
+  // no lead-time warning. Nothing selected yet, or an untracked variant, counts as nothing
+  // on hand — better to warn and be wrong than to promise stock we can't confirm.
+  const unitsOnHand = Math.max(0, selectedVariant?.inventory_count ?? 0);
+  const unitsToMake = madeToOrder ? Math.max(0, quantity - unitsOnHand) : 0;
+
   // Every dimension the product offers has a selection
   const dimensionsSatisfied =
     (hasColors || hasSizes) &&
@@ -361,12 +368,14 @@ export default function AddToCartButton({
 
       {/* Price Summary & Add to Cart */}
       <div className="pt-4 border-t space-y-4">
-        {madeToOrder && (
+        {unitsToMake > 0 && (
           <div className="rounded-md bg-primary/5 border border-primary/20 p-3">
             <p className="text-sm font-semibold text-gray-900">Made to order</p>
             <p className="text-sm text-gray-700 mt-0.5">
-              This item isn't kept in stock — we'll order it once you place your order. See the
-              product details for lead time.
+              {unitsToMake < quantity
+                ? `We have ${quantity - unitsToMake} of these on hand — we'll order the other ${unitsToMake} once you place your order.`
+                : "We don't have this one on hand — we'll order it once you place your order."}{' '}
+              See the product details for lead time.
             </p>
           </div>
         )}

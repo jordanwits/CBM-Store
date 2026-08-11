@@ -218,13 +218,16 @@ export async function refundOrder(
   if (options.withReturn) {
     const { data: items } = await supabase
       .from('order_items')
-      .select('variant_id, quantity, made_to_order')
+      .select('variant_id, units_from_stock')
       .eq('order_id', orderId);
 
     if (items && items.length > 0) {
       for (const item of items) {
-        // Made-to-order lines never decremented stock, so returning one must not add any
-        if (item.variant_id && !item.made_to_order) {
+        // Put back exactly what left the shelf. A made-to-order line may have drawn some,
+        // all, or none of its units from stock, so quantity is the wrong number here.
+        const unitsFromStock = item.units_from_stock ?? 0;
+
+        if (item.variant_id && unitsFromStock > 0) {
           const { data: variant } = await supabase
             .from('product_variants')
             .select('inventory_count')
@@ -235,7 +238,7 @@ export async function refundOrder(
             await supabase
               .from('product_variants')
               .update({
-                inventory_count: variant.inventory_count + item.quantity,
+                inventory_count: variant.inventory_count + unitsFromStock,
               })
               .eq('id', item.variant_id);
           }

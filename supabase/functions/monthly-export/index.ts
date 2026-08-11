@@ -61,9 +61,18 @@ function generateOrderItemsCsv(orderItems: any[]): string {
   const headers = [
     'id', 'order_id', 'product_id', 'variant_id',
     'product_name', 'variant_name', 'variant_size', 'variant_color', 'quantity',
+    'units_from_stock', 'units_to_make', 'made_to_order',
     'points_per_item', 'total_points', 'created_at',
   ];
-  return arrayToCsv(orderItems, headers);
+  // Mirrors unitsToMake in lib/orders/fulfillment.ts: a stocked line is never made,
+  // whatever its count says, so only made-to-order lines can carry a number here
+  const rows = orderItems.map((item: any) => ({
+    ...item,
+    units_to_make: item.made_to_order
+      ? Math.max(0, (item.quantity ?? 0) - (item.units_from_stock ?? 0))
+      : 0,
+  }));
+  return arrayToCsv(rows, headers);
 }
 
 function generatePointsLedgerCsv(transactions: any[]): string {
