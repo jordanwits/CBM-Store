@@ -62,7 +62,7 @@ export default async function AdminOrderDetailPage({
             Order #{order.id.slice(0, 8).toUpperCase()}
           </h1>
           <p className="text-gray-700">
-            Placed on <FormattedDate date={order.created_at} format="long" />
+            Placed on <FormattedDate date={order.created_at} format="datetimeShort" />
           </p>
         </div>
         <div className="flex flex-col gap-4 items-stretch sm:items-end w-full sm:w-auto">
@@ -126,7 +126,7 @@ export default async function AdminOrderDetailPage({
               </div>
               {order.tracking_number && (
                 <div>
-                  <p className="text-sm text-gray-700 font-medium">Tracking Number</p>
+                  <p className="text-sm text-gray-700 font-medium">Reference</p>
                   <Link 
                     href={getTrackingUrl(order.tracking_number)}
                     target="_blank"
@@ -156,10 +156,10 @@ export default async function AdminOrderDetailPage({
 
       <Card className="mb-6">
         <CardHeader>
-          <h2 className="text-lg font-semibold text-gray-900">Pickup</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Pickup Information</h2>
         </CardHeader>
         <CardContent>
-          <p className="text-gray-800">This order is for store pickup.</p>
+          <p className="text-gray-800">This order will be picked up at our location.</p>
         </CardContent>
       </Card>
 

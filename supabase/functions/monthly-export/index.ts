@@ -51,7 +51,9 @@ function arrayToCsv(data: any[], headers: string[]): string {
 
 function generateOrdersCsv(orders: any[]): string {
   const headers = [
-    'id', 'user_id', 'status', 'total_points',
+    'id', 'user_id', 'status', 'total_points', 'delivery_method',
+    'ship_name', 'ship_address_line1', 'ship_address_line2',
+    'ship_city', 'ship_state', 'ship_zip', 'ship_country',
     'tracking_number', 'notes', 'created_at', 'updated_at',
   ];
   return arrayToCsv(orders, headers);

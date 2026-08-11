@@ -1,4 +1,4 @@
-/**
+﻿/**
  * CSV generation and export utilities
  * Handles conversion of database records to CSV format with proper escaping
  */
@@ -54,6 +54,14 @@ export function generateOrdersCsv(orders: any[]): string {
     'user_id',
     'status',
     'total_points',
+    'delivery_method',
+    'ship_name',
+    'ship_address_line1',
+    'ship_address_line2',
+    'ship_city',
+    'ship_state',
+    'ship_zip',
+    'ship_country',
     'tracking_number',
     'notes',
     'created_at',
