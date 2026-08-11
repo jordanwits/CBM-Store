@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { signInWithPhonePassword } from './actions';
+import { LOGIN_REDIRECT_PARAM, safeRedirectPath } from '@/lib/auth/redirect';
 import { Button } from 'core/components/Button';
 import { Input } from 'core/components/Input';
 import { PhoneInput } from 'core/components/PhoneInput';
@@ -29,13 +30,20 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
 
+    // Where the user was headed before being sent here (e.g. an order link
+    // from an email); read at submit time so no Suspense boundary is needed.
+    const destination =
+      safeRedirectPath(
+        new URLSearchParams(window.location.search).get(LOGIN_REDIRECT_PARAM)
+      ) ?? '/dashboard';
+
     try {
       if (loginMethod === 'phone') {
         const result = await signInWithPhonePassword({ phone: phoneDigits, password });
         if (!result.ok) {
           setError(result.error);
         } else {
-          router.push('/dashboard');
+          router.push(destination);
           router.refresh();
         }
       } else {
@@ -46,7 +54,7 @@ export default function LoginPage() {
         if (signError) {
           setError(signError.message);
         } else {
-          router.push('/dashboard');
+          router.push(destination);
           router.refresh();
         }
       }
