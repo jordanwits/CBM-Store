@@ -350,7 +350,7 @@ export function customerPickupNoticeEmail(order: PickupNoticeData) {
       <h2 style="font-size: 18px; margin: 0 0 15px 0; color: #b45309;">Still coming</h2>
       ${pickupItemListHtml(order.pendingItems)}
       <p style="margin: 15px 0 0 0; font-size: 14px; color: #666;">
-        No need to wait for these — you can collect the items above whenever it suits you.
+        No need to wait for these. You can collect the items above whenever it suits you.
       </p>
     </div>
   ` : ''}

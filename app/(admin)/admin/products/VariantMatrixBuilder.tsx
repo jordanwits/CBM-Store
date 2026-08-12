@@ -311,7 +311,7 @@ export function VariantMatrixBuilder({ onSave, onCancel, isDevMode, disabled }: 
               </Button>
             </div>
             <p className="text-xs text-gray-600 mt-2">
-              Added as standalone variants — they are not combined with sizes or colors
+              Added as standalone variants. They are not combined with sizes or colors
             </p>
           </div>
 

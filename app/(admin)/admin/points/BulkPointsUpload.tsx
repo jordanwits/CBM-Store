@@ -101,7 +101,7 @@ export function BulkPointsUpload({ isDevMode }: BulkPointsUploadProps) {
         <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
           <p className="text-sm text-blue-900 mb-2">
             <strong>CSV Format:</strong> email, delta_points, reason (optional), point_type (optional:{' '}
-            universal or restricted — restricted credits CBM points)
+            universal or restricted, where restricted credits CBM points)
           </p>
           <ul className="text-sm text-blue-800 space-y-1 ml-4">
             <li>• Use positive numbers to add points, negative to deduct</li>

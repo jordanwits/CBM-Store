@@ -80,7 +80,7 @@ export async function submitProductSuggestion(suggestion: string): Promise<Submi
       timeStyle: 'short',
     });
     const siteUrl = getSiteUrl();
-    const subject = `New product suggestion — ${submitterLabel}`;
+    const subject = `New product suggestion from ${submitterLabel}`;
     const safeSuggestion = escapeHtml(trimmed);
     const safeName = escapeHtml(submitterLabel);
 

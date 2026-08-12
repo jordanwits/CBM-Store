@@ -181,7 +181,7 @@ export function PickupNoticeSender({ orderId, lines, isDevMode }: PickupNoticeSe
           onChange={(e) => setNote(e.target.value)}
           disabled={loading}
           rows={3}
-          placeholder="e.g. This is the remaining item from your order — sorry for the wait!"
+          placeholder="e.g. This is the remaining item from your order, sorry for the wait!"
           className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
         />
       </div>

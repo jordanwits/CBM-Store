@@ -78,7 +78,7 @@ export function SuggestProductButton({ isDevMode, className = '' }: SuggestProdu
 
             {done && (
               <Alert variant="success" className="mb-4">
-                <p className="text-sm">Thanks — we emailed your suggestion to the store admins.</p>
+                <p className="text-sm">Thanks! We emailed your suggestion to the store admins.</p>
               </Alert>
             )}
 

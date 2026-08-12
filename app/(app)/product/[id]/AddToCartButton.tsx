@@ -373,8 +373,8 @@ export default function AddToCartButton({
             <p className="text-sm font-semibold text-gray-900">Made to order</p>
             <p className="text-sm text-gray-700 mt-0.5">
               {unitsToMake < quantity
-                ? `We have ${quantity - unitsToMake} of these on hand — we'll order the other ${unitsToMake} once you place your order.`
-                : "We don't have this one on hand — we'll order it once you place your order."}{' '}
+                ? `We have ${quantity - unitsToMake} of these on hand. We'll order the other ${unitsToMake} once you place your order.`
+                : "We don't have this one on hand. We'll order it once you place your order."}{' '}
               See the product details for lead time.
             </p>
           </div>

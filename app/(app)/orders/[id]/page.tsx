@@ -171,8 +171,8 @@ export default async function OrderDetailPage({
                   {fulfillment.ready + fulfillment.pickedUp} of {fulfillment.total} items are ready
                 </p>
                 <p className="text-sm text-gray-700 mt-1">
-                  The rest of your order is still being prepared. You do not need to wait for it —
-                  collect what is ready whenever it suits you, and we will email you when the
+                  The rest of your order is still being prepared. You do not need to wait for it.
+                  Collect what is ready whenever it suits you, and we will email you when the
                   remaining {fulfillment.pending === 1 ? 'item arrives' : 'items arrive'}.
                 </p>
               </div>
