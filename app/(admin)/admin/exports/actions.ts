@@ -6,6 +6,8 @@ import {
   generateOrdersCsv,
   generateOrderItemsCsv,
   generatePointsLedgerCsv,
+  generateInventoryCsv,
+  buildInventorySnapshotRows,
   getFileSizeBytes,
 } from '@/lib/exports/csv-generator';
 
@@ -222,6 +224,160 @@ export async function generateMonthlyExport(
     return { 
       success: false, 
       error: errorMessage 
+    };
+  }
+}
+
+/**
+ * Generate an inventory snapshot: current stock for every variant in the catalog.
+ *
+ * Deliberately takes no month. The other three exports summarise a period of order
+ * history; this one is a photograph of the shelf at the moment the button is pressed, so
+ * the snapshot date goes in the `month` column (see migration 038) and the file is named
+ * for that date.
+ */
+export async function generateInventorySnapshot(): Promise<ExportResult> {
+  const isDevMode = !process.env.NEXT_PUBLIC_SUPABASE_URL ||
+                    process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder');
+
+  if (isDevMode) {
+    return {
+      success: false,
+      error: 'Export generation is not available in development mode. Please configure Supabase to use this feature.'
+    };
+  }
+
+  try {
+    const { supabase, profile } = await requireAdmin();
+
+    // Inactive products and untracked variants are included and flagged rather than
+    // filtered, so the file can be reconciled against the whole catalog.
+    const [productsResult, variantsResult, settingsResult] = await Promise.all([
+      supabase
+        .from('products')
+        .select('id, name, active, made_to_order, base_usd')
+        .order('name', { ascending: true }),
+      supabase
+        .from('product_variants')
+        .select('id, product_id, name, size, color, sku, active, inventory_count, price_adjustment_usd, updated_at')
+        .order('name', { ascending: true }),
+      supabase
+        .from('store_settings')
+        .select('usd_to_points_rate')
+        .single(),
+    ]);
+
+    if (productsResult.error) {
+      return {
+        success: false,
+        error: `Failed to read products: ${productsResult.error.message}`,
+      };
+    }
+
+    if (variantsResult.error) {
+      return {
+        success: false,
+        error: `Failed to read product variants: ${variantsResult.error.message}`,
+      };
+    }
+
+    const products = productsResult.data || [];
+
+    if (products.length === 0) {
+      return {
+        success: false,
+        error: 'No products found. Add products to the catalog before generating an inventory snapshot.',
+      };
+    }
+
+    const snapshotAt = new Date().toISOString();
+    const conversionRate = settingsResult.data?.usd_to_points_rate || 100;
+
+    const rows = buildInventorySnapshotRows(
+      products,
+      variantsResult.data || [],
+      conversionRate,
+      snapshotAt
+    );
+
+    const csvContent = generateInventoryCsv(rows);
+    const rowCount = rows.length;
+
+    const snapshotDate = snapshotAt.slice(0, 10); // YYYY-MM-DD
+    const timestamp = snapshotAt.replace(/[:.]/g, '-').slice(0, -5);
+    const fileName = `${snapshotDate}_inventory_${timestamp}.csv`;
+    const fileSizeBytes = getFileSizeBytes(csvContent);
+
+    const { error: uploadError } = await supabase.storage
+      .from('exports')
+      .upload(fileName, csvContent, {
+        contentType: 'text/csv',
+        upsert: false,
+      });
+
+    if (uploadError) {
+      console.error('Storage upload error:', uploadError);
+      return {
+        success: false,
+        error: `Failed to upload export file to storage: ${uploadError.message}. Please check your storage configuration and try again.`
+      };
+    }
+
+    const { data: exportRecord, error: insertError } = await supabase
+      .from('monthly_exports')
+      .insert({
+        month: snapshotDate,
+        export_type: 'inventory',
+        storage_path: fileName,
+        file_size_bytes: fileSizeBytes,
+        row_count: rowCount,
+        created_by: profile.id,
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error('Error inserting export metadata:', insertError);
+      await supabase.storage.from('exports').remove([fileName]);
+      return {
+        success: false,
+        error: `Failed to save export metadata: ${insertError.message}. The file was uploaded but the export record could not be created. Please try again.`
+      };
+    }
+
+    try {
+      revalidatePath('/admin/exports');
+    } catch (revalidateError) {
+      console.warn('Error revalidating path (non-critical):', revalidateError);
+    }
+
+    return {
+      success: true,
+      message: `Successfully exported ${rowCount} inventory rows as of ${snapshotDate}`,
+      exportId: String(exportRecord.id),
+    };
+  } catch (error) {
+    console.error('Error generating inventory snapshot:', error);
+
+    if (error && typeof error === 'object' && 'digest' in error) {
+      const digest = (error as any).digest;
+      if (typeof digest === 'string' && digest.startsWith('NEXT_REDIRECT')) {
+        return {
+          success: false,
+          error: 'Your session has expired or you do not have permission to perform this action. Please refresh the page and log in again.'
+        };
+      }
+    }
+
+    const errorMessage = error instanceof Error
+      ? error.message
+      : typeof error === 'string'
+        ? error
+        : 'An unexpected error occurred while generating the inventory snapshot. Please try again or contact support if the problem persists.';
+
+    return {
+      success: false,
+      error: errorMessage
     };
   }
 }

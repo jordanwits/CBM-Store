@@ -5,21 +5,28 @@ import { Button } from 'core/components/Button';
 import { Input } from 'core/components/Input';
 import { Alert } from 'core/components/Alert';
 import { ChoiceModal } from 'core/components/ChoiceModal';
-import { generateMonthlyExport, generateCombinedExport } from './actions';
+import { generateMonthlyExport, generateCombinedExport, generateInventorySnapshot } from './actions';
 
 interface ExportGeneratorFormProps {
   isDevMode: boolean;
 }
 
+type ExportType = 'orders' | 'order_items' | 'points_ledger' | 'inventory';
+
+/** The types a month range applies to. Inventory is a snapshot and takes its own path. */
+type MonthlyExportType = Exclude<ExportType, 'inventory'>;
+
 export function ExportGeneratorForm({ isDevMode }: ExportGeneratorFormProps) {
   const [startMonth, setStartMonth] = useState('');
   const [endMonth, setEndMonth] = useState('');
-  const [exportType, setExportType] = useState<'orders' | 'order_items' | 'points_ledger'>('orders');
+  const [exportType, setExportType] = useState<ExportType>('orders');
   const [isGenerating, setIsGenerating] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [progress, setProgress] = useState<string[]>([]);
   const [showChoiceModal, setShowChoiceModal] = useState(false);
-  const [pendingMonths, setPendingMonths] = useState<{ start: string; end: string } | null>(null);
+  const [pendingMonths, setPendingMonths] = useState<
+    { start: string; end: string; type: MonthlyExportType } | null
+  >(null);
 
   const formatMonthName = (month: string): string => {
     const [year, monthNum] = month.split('-');
@@ -58,7 +65,18 @@ export function ExportGeneratorForm({ isDevMode }: ExportGeneratorFormProps) {
     return months;
   };
 
+  // Inventory is a photograph of current stock, not a summary of a period, so the month
+  // range does not apply to it.
+  const isInventory = exportType === 'inventory';
+
   const handleGenerate = async () => {
+    if (exportType === 'inventory') {
+      await generateInventoryExport();
+      return;
+    }
+
+    const monthlyType: MonthlyExportType = exportType;
+
     if (!startMonth) {
       setMessage({ type: 'error', text: 'Please select a start month' });
       return;
@@ -92,16 +110,41 @@ export function ExportGeneratorForm({ isDevMode }: ExportGeneratorFormProps) {
 
     // If multiple months, show choice modal
     if (monthsToGenerate.length > 1) {
-      setPendingMonths({ start: normalizedStartMonth, end: normalizedEndMonth });
+      setPendingMonths({ start: normalizedStartMonth, end: normalizedEndMonth, type: monthlyType });
       setShowChoiceModal(true);
       return;
     }
 
     // Single month - proceed directly
-    await generateIndividualExports([normalizedStartMonth]);
+    await generateIndividualExports([normalizedStartMonth], monthlyType);
   };
 
-  const generateIndividualExports = async (months: string[]) => {
+  const generateInventoryExport = async () => {
+    setIsGenerating(true);
+    setMessage(null);
+    setProgress(['Taking an inventory snapshot...']);
+
+    try {
+      const result = await generateInventorySnapshot();
+
+      if (result.success) {
+        setMessage({ type: 'success', text: result.message || 'Successfully generated inventory snapshot' });
+        setProgress(prev => [...prev, '✓ Inventory snapshot: Success']);
+      } else {
+        setMessage({ type: 'error', text: result.error || 'Failed to generate inventory snapshot' });
+        setProgress(prev => [...prev, `✗ Inventory snapshot: ${result.error || 'Failed'}`]);
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unexpected error occurred';
+      console.error('Error calling generateInventorySnapshot:', error);
+      setMessage({ type: 'error', text: errorMessage });
+      setProgress(prev => [...prev, `✗ Inventory snapshot: ${errorMessage}`]);
+    }
+
+    setIsGenerating(false);
+  };
+
+  const generateIndividualExports = async (months: string[], type: MonthlyExportType) => {
     setIsGenerating(true);
     setMessage(null);
     setProgress([]);
@@ -109,10 +152,10 @@ export function ExportGeneratorForm({ isDevMode }: ExportGeneratorFormProps) {
     const results: { month: string; success: boolean; message: string }[] = [];
 
     for (const month of months) {
-      setProgress(prev => [...prev, `Generating ${exportType} for ${month}...`]);
-      
+      setProgress(prev => [...prev, `Generating ${type} for ${month}...`]);
+
       try {
-        const result = await generateMonthlyExport(month, exportType);
+        const result = await generateMonthlyExport(month, type);
         
         results.push({
           month,
@@ -142,7 +185,7 @@ export function ExportGeneratorForm({ isDevMode }: ExportGeneratorFormProps) {
     if (failCount === 0) {
       setMessage({ 
         type: 'success', 
-        text: `Successfully generated ${successCount} export${successCount > 1 ? 's' : ''} for ${exportType}` 
+        text: `Successfully generated ${successCount} export${successCount > 1 ? 's' : ''} for ${type}`
       });
       setStartMonth('');
       setEndMonth('');
@@ -161,16 +204,16 @@ export function ExportGeneratorForm({ isDevMode }: ExportGeneratorFormProps) {
     setIsGenerating(false);
   };
 
-  const handleCombinedExport = async (start: string, end: string) => {
+  const handleCombinedExport = async (start: string, end: string, type: MonthlyExportType) => {
     setIsGenerating(true);
     setMessage(null);
     setProgress([]);
     setShowChoiceModal(false);
 
-    setProgress(prev => [...prev, `Generating combined ${exportType} export from ${start} to ${end}...`]);
+    setProgress(prev => [...prev, `Generating combined ${type} export from ${start} to ${end}...`]);
 
     try {
-      const result = await generateCombinedExport(start, end, exportType);
+      const result = await generateCombinedExport(start, end, type);
       
       if (result.success) {
         setMessage({ 
@@ -206,11 +249,12 @@ export function ExportGeneratorForm({ isDevMode }: ExportGeneratorFormProps) {
 
     if (choice === 'individual') {
       const months = getMonthsBetween(pendingMonths.start, pendingMonths.end);
+      const type = pendingMonths.type;
       setShowChoiceModal(false);
       setPendingMonths(null);
-      await generateIndividualExports(months);
+      await generateIndividualExports(months, type);
     } else {
-      await handleCombinedExport(pendingMonths.start, pendingMonths.end);
+      await handleCombinedExport(pendingMonths.start, pendingMonths.end, pendingMonths.type);
     }
   };
 
@@ -223,6 +267,7 @@ export function ExportGeneratorForm({ isDevMode }: ExportGeneratorFormProps) {
         <div>
           <label htmlFor="startMonth" className="block text-sm font-medium text-gray-700 mb-2">
             Start Month
+            {isInventory && <span className="text-gray-500 font-normal"> (not used)</span>}
           </label>
           <Input
             id="startMonth"
@@ -230,14 +275,15 @@ export function ExportGeneratorForm({ isDevMode }: ExportGeneratorFormProps) {
             value={startMonth}
             onChange={(e) => setStartMonth(e.target.value)}
             max={currentMonth}
-            disabled={isDevMode || isGenerating}
+            disabled={isDevMode || isGenerating || isInventory}
             placeholder="Select start month"
           />
         </div>
 
         <div>
           <label htmlFor="endMonth" className="block text-sm font-medium text-gray-700 mb-2">
-            End Month <span className="text-gray-500 font-normal">(optional)</span>
+            End Month{' '}
+            <span className="text-gray-500 font-normal">{isInventory ? '(not used)' : '(optional)'}</span>
           </label>
           <Input
             id="endMonth"
@@ -246,7 +292,7 @@ export function ExportGeneratorForm({ isDevMode }: ExportGeneratorFormProps) {
             onChange={(e) => setEndMonth(e.target.value)}
             min={startMonth}
             max={currentMonth}
-            disabled={isDevMode || isGenerating || !startMonth}
+            disabled={isDevMode || isGenerating || isInventory || !startMonth}
             placeholder="Same as start"
           />
         </div>
@@ -258,13 +304,14 @@ export function ExportGeneratorForm({ isDevMode }: ExportGeneratorFormProps) {
           <select
             id="exportType"
             value={exportType}
-            onChange={(e) => setExportType(e.target.value as any)}
+            onChange={(e) => setExportType(e.target.value as ExportType)}
             disabled={isDevMode || isGenerating}
             className="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary disabled:bg-gray-100 disabled:cursor-not-allowed"
           >
             <option value="orders" className="text-gray-900 bg-white">Orders</option>
             <option value="order_items" className="text-gray-900 bg-white">Order Items</option>
             <option value="points_ledger" className="text-gray-900 bg-white">Points Ledger</option>
+            <option value="inventory" className="text-gray-900 bg-white">Inventory Snapshot</option>
           </select>
         </div>
       </div>
@@ -289,7 +336,7 @@ export function ExportGeneratorForm({ isDevMode }: ExportGeneratorFormProps) {
       <div className="flex items-start gap-3">
         <Button
           onClick={handleGenerate}
-          disabled={isDevMode || isGenerating || !startMonth}
+          disabled={isDevMode || isGenerating || (!isInventory && !startMonth)}
           variant="primary"
         >
           {isGenerating ? (
@@ -306,8 +353,17 @@ export function ExportGeneratorForm({ isDevMode }: ExportGeneratorFormProps) {
         </Button>
         
         <div className="text-sm text-gray-500 pt-2">
-          <p className="font-medium">Generate exports for one or multiple months.</p>
-          <p className="mt-1">Leave end month empty to generate just one month, or select a range to generate multiple months at once.</p>
+          {isInventory ? (
+            <>
+              <p className="font-medium">Current stock for every product variant, as of right now.</p>
+              <p className="mt-1">Not tied to orders or to a month. Inactive products and variants with no stock tracking are included and flagged.</p>
+            </>
+          ) : (
+            <>
+              <p className="font-medium">Generate exports for one or multiple months.</p>
+              <p className="mt-1">Leave end month empty to generate just one month, or select a range to generate multiple months at once.</p>
+            </>
+          )}
         </div>
       </div>
 

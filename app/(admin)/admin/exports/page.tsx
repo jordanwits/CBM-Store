@@ -18,9 +18,10 @@ export default async function AdminExportsPage() {
     <div>
       <div className="flex justify-between items-start mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Monthly Exports</h1>
+          <h1 className="text-3xl font-bold text-gray-900">Exports</h1>
           <p className="text-gray-600 mt-1">
-            Generate and download monthly CSV exports of orders and points transactions
+            Generate and download CSV exports: monthly orders and points transactions, or a
+            snapshot of current inventory
           </p>
         </div>
       </div>
@@ -67,7 +68,7 @@ export default async function AdminExportsPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b text-left">
-                    <th className="pb-3 pr-4 text-sm font-semibold text-gray-900">Month</th>
+                    <th className="pb-3 pr-4 text-sm font-semibold text-gray-900">Period</th>
                     <th className="pb-3 pr-4 text-sm font-semibold text-gray-900">Type</th>
                     <th className="pb-3 pr-4 text-sm font-semibold text-gray-900">Rows</th>
                     <th className="pb-3 pr-4 text-sm font-semibold text-gray-900">Size</th>
@@ -88,7 +89,7 @@ export default async function AdminExportsPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
               <p className="text-gray-600 font-medium">No exports yet</p>
-              <p className="text-sm text-gray-500 mt-1">Generate your first monthly export above</p>
+              <p className="text-sm text-gray-500 mt-1">Generate your first export above</p>
             </div>
           )}
         </CardContent>
