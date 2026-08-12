@@ -8,6 +8,7 @@ import { OrderListActions } from './OrderListActions';
 import { OrderActionsCell } from './OrderActionsCell';
 import Link from 'next/link';
 import { orderStatusLabel, orderStatusPillClasses } from '@/lib/orders/status';
+import { summarizeFulfillment } from '@/lib/orders/fulfillment';
 
 const ITEMS_PER_PAGE = 50;
 
@@ -68,6 +69,27 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
     };
     totalCount = countResult.count ?? 0;
     orders = dataResult.data ?? [];
+
+    // One rollup for the page of orders on screen, rather than a join that would multiply
+    // every order row by its line count.
+    if (orders.length > 0) {
+      const { data: lineStates } = await supabase
+        .from('order_items')
+        .select('order_id, fulfillment_status')
+        .in('order_id', orders.map((order: any) => order.id));
+
+      const byOrder = new Map<string, Array<{ fulfillment_status?: string | null }>>();
+      for (const line of lineStates ?? []) {
+        const bucket = byOrder.get(line.order_id) ?? [];
+        bucket.push(line);
+        byOrder.set(line.order_id, bucket);
+      }
+
+      orders = orders.map((order: any) => ({
+        ...order,
+        fulfillment: summarizeFulfillment(byOrder.get(order.id) ?? []),
+      }));
+    }
   }
 
   const totalPages = Math.max(1, Math.ceil(totalCount / ITEMS_PER_PAGE));
@@ -155,11 +177,18 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
                         <span className="text-primary font-semibold font-mono text-sm">
                           #{order.id.slice(0, 8).toUpperCase()}
                         </span>
-                        <span
-                          className={`px-2 py-1 rounded-full text-xs font-medium shrink-0 ${orderStatusPillClasses(order.status)}`}
-                        >
-                          {orderStatusLabel(order.status)}
-                        </span>
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <span
+                            className={`px-2 py-1 rounded-full text-xs font-medium ${orderStatusPillClasses(order.status)}`}
+                          >
+                            {orderStatusLabel(order.status)}
+                          </span>
+                          {order.status !== 'cancelled' && order.fulfillment?.isPartiallyFulfilled && (
+                            <span className="px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-900">
+                              {order.fulfillment.outstanding} outstanding
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <p className="text-sm text-gray-900 truncate">
                         {order.profiles?.email?.trim() || order.profiles?.phone?.trim() || 'N/A'}
@@ -216,11 +245,18 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
                       </td>
                       <td className="px-4 py-3 text-sm font-semibold text-gray-900">{order.total_points}</td>
                       <td className="px-4 py-3 text-sm">
-                        <span
-                          className={`px-2 py-1 rounded-full text-xs font-medium ${orderStatusPillClasses(order.status)}`}
-                        >
-                          {orderStatusLabel(order.status)}
-                        </span>
+                        <div className="flex flex-col items-start gap-1">
+                          <span
+                            className={`px-2 py-1 rounded-full text-xs font-medium ${orderStatusPillClasses(order.status)}`}
+                          >
+                            {orderStatusLabel(order.status)}
+                          </span>
+                          {order.status !== 'cancelled' && order.fulfillment?.isPartiallyFulfilled && (
+                            <span className="px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-900">
+                              {order.fulfillment.outstanding} outstanding
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-700">
                         <FormattedDate date={order.created_at} format="date" />

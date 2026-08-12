@@ -32,6 +32,13 @@ export function OrderStatusEditor({
   const [status, setStatus] = useState(currentStatus);
   const [trackingNumber, setTrackingNumber] = useState(currentTrackingNumber || '');
   const [notes, setNotes] = useState(currentNotes || '');
+  // Null until staff touch the box: the default follows the dropdown, so picking a new
+  // status arms the email and fixing a note leaves it disarmed, without overriding a
+  // deliberate choice made before the status was changed.
+  const [notifyOverride, setNotifyOverride] = useState<boolean | null>(null);
+
+  const statusChanged = status !== currentStatus;
+  const notifyCustomer = notifyOverride ?? statusChanged;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,13 +50,20 @@ export function OrderStatusEditor({
       status,
       trackingNumber: trackingNumber || undefined,
       notes: notes || undefined,
+      notifyCustomer,
     });
 
     setLoading(false);
 
     if (result.success) {
-      setMessage({ type: 'success', text: 'Order updated successfully!' });
+      setMessage({
+        type: 'success',
+        text: notifyCustomer
+          ? 'Order updated and the customer has been emailed.'
+          : 'Order updated. No email was sent to the customer.',
+      });
       setIsEditing(false);
+      setNotifyOverride(null);
       setTimeout(() => {
         router.refresh();
       }, 500);
@@ -62,6 +76,7 @@ export function OrderStatusEditor({
     setStatus(currentStatus);
     setTrackingNumber(currentTrackingNumber || '');
     setNotes(currentNotes || '');
+    setNotifyOverride(null);
     setIsEditing(false);
     setMessage(null);
   };
@@ -122,6 +137,26 @@ export function OrderStatusEditor({
             rows={3}
             className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
           />
+        </div>
+
+        <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={notifyCustomer}
+              onChange={(e) => setNotifyOverride(e.target.checked)}
+              disabled={loading}
+              className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <span className="text-sm text-gray-800">
+              <span className="font-medium">Email the customer about this update</span>
+              <span className="block text-xs text-gray-600 mt-0.5">
+                {statusChanged
+                  ? 'They will get the standard status email for the whole order.'
+                  : 'The status has not changed, so this is off by default. Use “Send pickup notice” below to tell them about specific items.'}
+              </span>
+            </span>
+          </label>
         </div>
 
         <div className="flex gap-3 pt-2">

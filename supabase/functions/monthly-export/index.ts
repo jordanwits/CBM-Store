@@ -63,7 +63,7 @@ function generateOrderItemsCsv(orderItems: any[]): string {
   const headers = [
     'id', 'order_id', 'product_id', 'variant_id',
     'product_name', 'variant_name', 'variant_size', 'variant_color', 'quantity',
-    'units_from_stock', 'units_to_make', 'made_to_order',
+    'units_from_stock', 'units_to_make', 'made_to_order', 'fulfillment_status',
     'points_per_item', 'total_points', 'created_at',
   ];
   // Mirrors unitsToMake in lib/orders/fulfillment.ts: a stocked line is never made,

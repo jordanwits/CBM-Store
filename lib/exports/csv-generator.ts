@@ -88,6 +88,7 @@ export function generateOrderItemsCsv(orderItems: any[]): string {
     'units_from_stock',
     'units_to_make',
     'made_to_order',
+    'fulfillment_status',
     'points_per_item',
     'total_points',
     'created_at',

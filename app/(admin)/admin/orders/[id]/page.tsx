@@ -3,10 +3,17 @@ import { Card, CardHeader, CardContent } from 'core/components/Card';
 import { BackButton } from 'core/components/BackButton';
 import { FormattedDate } from 'core/components/FormattedDate';
 import { orderStatusLabel, orderStatusPillClasses } from '@/lib/orders/status';
-import { orderItemProcurement } from '@/lib/orders/fulfillment';
+import {
+  orderItemProcurement,
+  orderItemVariantLabel,
+  summarizeFulfillment,
+  unitsToMake,
+} from '@/lib/orders/fulfillment';
 import { notFound } from 'next/navigation';
 import { OrderStatusEditor } from './OrderStatusEditor';
 import { OrderActions } from './OrderActions';
+import { PickupNoticeSender } from './PickupNoticeSender';
+import { ItemFulfillmentSelect } from './ItemFulfillmentSelect';
 import { getTrackingUrl } from '@/lib/tracking';
 import Link from 'next/link';
 
@@ -52,6 +59,7 @@ export default async function AdminOrderDetailPage({
   const order = orderResult.data;
   const items = itemsResult.data || [];
   const isAlreadyRefunded = (refundCheck.data?.length ?? 0) > 0;
+  const fulfillment = summarizeFulfillment(items);
 
   return (
     <div className="px-4 py-6 sm:px-0">
@@ -124,6 +132,20 @@ export default async function AdminOrderDetailPage({
                   {orderStatusLabel(order.status)}
                 </span>
               </div>
+              {fulfillment.total > 0 && order.status !== 'cancelled' && (
+                <div>
+                  <p className="text-sm text-gray-700 font-medium">Items</p>
+                  <p className="mt-1 text-gray-900">
+                    {fulfillment.pickedUp} picked up · {fulfillment.ready} ready ·{' '}
+                    {fulfillment.pending} not ready
+                  </p>
+                  {fulfillment.isPartiallyFulfilled && (
+                    <span className="inline-block mt-1 px-3 py-1 rounded-full text-sm font-medium bg-amber-100 text-amber-900">
+                      {fulfillment.outstanding} outstanding
+                    </span>
+                  )}
+                </div>
+              )}
               {order.tracking_number && (
                 <div>
                   <p className="text-sm text-gray-700 font-medium">Reference</p>
@@ -191,6 +213,9 @@ export default async function AdminOrderDetailPage({
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-900 uppercase bg-gray-50">
                       Total
                     </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-900 uppercase bg-gray-50">
+                      Fulfillment
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
@@ -222,6 +247,14 @@ export default async function AdminOrderDetailPage({
                         <td className="px-4 py-3 text-sm font-semibold text-gray-900">
                           {item.total_points}
                         </td>
+                        <td className="px-4 py-3 text-sm">
+                          <ItemFulfillmentSelect
+                            orderId={order.id}
+                            itemId={item.id}
+                            currentStatus={item.fulfillment_status ?? 'pending'}
+                            disabled={isDevMode || order.status === 'cancelled'}
+                          />
+                        </td>
                       </tr>
                     );
                   })}
@@ -233,6 +266,28 @@ export default async function AdminOrderDetailPage({
           )}
         </CardContent>
       </Card>
+
+      {order.status !== 'cancelled' && items.length > 0 && (
+        <Card className="mb-6">
+          <CardHeader>
+            <h2 className="text-lg font-semibold text-gray-900">Customer Notifications</h2>
+          </CardHeader>
+          <CardContent>
+            <PickupNoticeSender
+              orderId={order.id}
+              lines={items.map((item) => ({
+                id: item.id,
+                productName: item.product_name,
+                variantLabel: orderItemVariantLabel(item),
+                quantity: item.quantity,
+                unitsToMake: unitsToMake(item),
+                fulfillmentStatus: item.fulfillment_status ?? 'pending',
+              }))}
+              isDevMode={isDevMode}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {order.notes && (
         <Card>

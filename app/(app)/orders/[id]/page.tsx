@@ -13,6 +13,11 @@ import { PrintOrderButton, EmailSupportButton, CallSupportButton } from './Order
 import { getTrackingUrl } from '@/lib/tracking';
 import { cbmBranding } from '@/branding';
 import { orderStatusLabel, orderStatusBadgeVariant } from '@/lib/orders/status';
+import {
+  itemFulfillmentLabel,
+  itemFulfillmentPillClasses,
+  summarizeFulfillment,
+} from '@/lib/orders/fulfillment';
 
 export default async function OrderDetailPage({
   params,
@@ -49,6 +54,7 @@ export default async function OrderDetailPage({
         quantity: 2,
         points_per_item: 2500,
         total_points: 5000,
+        fulfillment_status: 'ready',
       },
       {
         id: 'item-2',
@@ -59,6 +65,7 @@ export default async function OrderDetailPage({
         quantity: 1,
         points_per_item: 3500,
         total_points: 3500,
+        fulfillment_status: 'ready',
       },
       {
         id: 'item-3',
@@ -69,6 +76,7 @@ export default async function OrderDetailPage({
         quantity: 1,
         points_per_item: 1500,
         total_points: 1500,
+        fulfillment_status: 'pending',
       },
     ];
   } else {
@@ -93,7 +101,7 @@ export default async function OrderDetailPage({
       supabase
         .from('order_items')
         .select(
-          'id, order_id, product_id, product_name, variant_name, quantity, points_per_item, total_points, products(images)'
+          'id, order_id, product_id, product_name, variant_name, quantity, points_per_item, total_points, fulfillment_status, products(images)'
         )
         .eq('order_id', id),
     ]);
@@ -113,6 +121,9 @@ export default async function OrderDetailPage({
       product_image: item.products?.images?.[0] ?? null,
     }));
   }
+
+  const fulfillment = summarizeFulfillment(items);
+  const showFulfillmentDetail = order.status !== 'cancelled' && fulfillment.isPartiallyFulfilled;
 
   return (
     <div>
@@ -147,6 +158,28 @@ export default async function OrderDetailPage({
           <PrintOrderButton />
         </div>
       </div>
+
+      {showFulfillmentDetail && (
+        <Card className="mb-6 border-2 border-amber-200 bg-amber-50">
+          <CardContent className="py-5">
+            <div className="flex gap-3">
+              <svg className="w-6 h-6 text-amber-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div>
+                <p className="font-semibold text-gray-900">
+                  {fulfillment.ready + fulfillment.pickedUp} of {fulfillment.total} items are ready
+                </p>
+                <p className="text-sm text-gray-700 mt-1">
+                  The rest of your order is still being prepared. You do not need to wait for it —
+                  collect what is ready whenever it suits you, and we will email you when the
+                  remaining {fulfillment.pending === 1 ? 'item arrives' : 'items arrive'}.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         {/* Order Summary Card */}
@@ -283,6 +316,15 @@ export default async function OrderDetailPage({
                         {item.product_name}
                       </h3>
                     </Link>
+                    {showFulfillmentDetail && (
+                      <span
+                        className={`inline-block mb-2 px-2 py-1 rounded-full text-xs font-medium ${itemFulfillmentPillClasses(item.fulfillment_status ?? 'pending')}`}
+                      >
+                        {item.fulfillment_status === 'pending' || !item.fulfillment_status
+                          ? 'Still being prepared'
+                          : itemFulfillmentLabel(item.fulfillment_status)}
+                      </span>
+                    )}
                     <div className="space-y-1">
                       {item.variant_name && (
                         <p className="text-sm text-gray-600 flex items-center gap-2">

@@ -3,7 +3,18 @@
 import { requireAdmin } from '@/lib/auth/require-admin';
 import { revalidatePath } from 'next/cache';
 import { sendEmail, getAdminEmails } from '@/lib/email/resend';
-import { customerOrderStatusEmail, adminOrderStatusEmail } from '@/lib/email/templates';
+import {
+  customerOrderStatusEmail,
+  adminOrderStatusEmail,
+  customerPickupNoticeEmail,
+  adminPickupNoticeEmail,
+  type PickupNoticeItem,
+} from '@/lib/email/templates';
+import {
+  orderItemVariantLabel,
+  ITEM_FULFILLMENT_STATUSES,
+  type ItemFulfillmentStatus,
+} from '@/lib/orders/fulfillment';
 
 const VALID_STATUSES = ['new', 'processing', 'shipped', 'delivered', 'cancelled'] as const;
 type OrderStatus = typeof VALID_STATUSES[number];
@@ -13,6 +24,12 @@ interface UpdateOrderStatusData {
   status: string;
   trackingNumber?: string;
   notes?: string;
+  /**
+   * Whether the customer hears about this save. Defaults to "the status actually changed",
+   * so correcting a tracking number or adding an internal note no longer re-announces a
+   * status the customer was already told about. Passing true re-sends on demand.
+   */
+  notifyCustomer?: boolean;
 }
 
 export async function updateOrderStatus(data: UpdateOrderStatusData) {
@@ -33,7 +50,21 @@ export async function updateOrderStatus(data: UpdateOrderStatusData) {
   if (!VALID_STATUSES.includes(data.status as OrderStatus)) {
     return { success: false, error: 'Invalid order status' };
   }
-  
+
+  // Read before writing: whether the status actually moved decides who gets emailed, and
+  // nothing else on the order changes underneath us during a status save.
+  const { data: existingOrder } = await supabase
+    .from('orders')
+    .select('*, profiles(email, phone)')
+    .eq('id', data.orderId)
+    .single();
+
+  if (!existingOrder) {
+    return { success: false, error: 'Order not found' };
+  }
+
+  const statusChanged = existingOrder.status !== data.status;
+
   // Build update object
   const updateData: any = {
     status: data.status,
@@ -65,29 +96,26 @@ export async function updateOrderStatus(data: UpdateOrderStatusData) {
   
   // Send email notifications (failures should not block status update)
   try {
-    // Get order details with user email
-    const { data: orderDetails } = await supabase
-      .from('orders')
-      .select('*, profiles(email, phone)')
-      .eq('id', data.orderId)
-      .single();
-    
-    const customerEmail = (orderDetails as any)?.profiles?.email?.trim();
-    const customerPhone = (orderDetails as any)?.profiles?.phone?.trim();
-    if (orderDetails) {
+    // The customer hears about this only when asked to; the caller's default is
+    // "the status moved". Admins get the record whenever it actually moved.
+    const notifyCustomer = data.notifyCustomer ?? statusChanged;
+
+    const customerEmail = (existingOrder as any)?.profiles?.email?.trim();
+    const customerPhone = (existingOrder as any)?.profiles?.phone?.trim();
+    {
       const orderNumber = data.orderId.slice(0, 8).toUpperCase();
       const emailData = {
         orderId: data.orderId,
         orderNumber,
         customerEmail: customerEmail || customerPhone || '(no email on file)',
-        totalPoints: orderDetails.total_points,
+        totalPoints: existingOrder.total_points,
         itemCount: 0,
-        createdAt: orderDetails.created_at,
+        createdAt: existingOrder.created_at,
         status: data.status,
         trackingNumber: data.trackingNumber,
       };
 
-      if (customerEmail) {
+      if (customerEmail && notifyCustomer) {
         sendEmail({
           to: customerEmail,
           ...customerOrderStatusEmail(emailData),
@@ -95,7 +123,7 @@ export async function updateOrderStatus(data: UpdateOrderStatusData) {
       }
 
       const adminEmails = getAdminEmails();
-      if (adminEmails.length > 0) {
+      if (adminEmails.length > 0 && statusChanged) {
         sendEmail({
           to: adminEmails,
           ...adminOrderStatusEmail(emailData),
@@ -106,7 +134,216 @@ export async function updateOrderStatus(data: UpdateOrderStatusData) {
     // Log but don't fail the status update
     console.error('Error sending status update emails:', emailError);
   }
-  
+
+  return { success: true };
+}
+
+interface SendPickupNoticeData {
+  orderId: string;
+  /** Order item ids the customer can collect now; everything else is still outstanding. */
+  readyItemIds: string[];
+  note?: string;
+}
+
+interface SendPickupNoticeResult {
+  success: boolean;
+  error?: string;
+  /** Sent, but something adjacent did not go to plan and staff should know. */
+  warning?: string;
+}
+
+/**
+ * Tell a customer which lines they can collect, independent of the order's status.
+ *
+ * An order with a made-to-order line becomes collectable in stages, and the single status
+ * field can only describe the order as a whole. This says what is actually ready, so the
+ * same action covers "most of it is in" today and "the last piece arrived" next week.
+ * It deliberately leaves the status alone — staff decide when the order is done.
+ *
+ * Unlike the status emails this one is awaited: staff pressed Send, so a failure is theirs
+ * to see rather than a line in the server log.
+ */
+export async function sendPickupNotice(
+  data: SendPickupNoticeData
+): Promise<SendPickupNoticeResult> {
+  const isDevMode = !process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder');
+
+  if (isDevMode) {
+    return { success: false, error: 'Sending notices requires Supabase to be configured.' };
+  }
+
+  const { supabase } = await requireAdmin();
+
+  const [orderResult, itemsResult] = await Promise.all([
+    supabase
+      .from('orders')
+      .select('id, total_points, created_at, profiles(email, phone)')
+      .eq('id', data.orderId)
+      .single(),
+    supabase
+      .from('order_items')
+      .select(
+        'id, product_name, variant_name, variant_size, variant_color, quantity, fulfillment_status'
+      )
+      .eq('order_id', data.orderId),
+  ]);
+
+  const order = orderResult.data;
+
+  if (!order) {
+    return { success: false, error: 'Order not found' };
+  }
+
+  if (itemsResult.error) {
+    console.error('Error loading order items for pickup notice:', itemsResult.error);
+    return { success: false, error: 'Failed to load the order items' };
+  }
+
+  const allItems = itemsResult.data || [];
+  const readyIds = new Set(data.readyItemIds);
+
+  const toNoticeItem = (item: (typeof allItems)[number]): PickupNoticeItem => ({
+    productName: item.product_name,
+    variantLabel: orderItemVariantLabel(item),
+    quantity: item.quantity,
+  });
+
+  const readyItems = allItems.filter((item) => readyIds.has(item.id)).map(toNoticeItem);
+
+  // A line the customer already collected is not "still coming" — without this, the notice
+  // for a late made-to-order item would tell them the things in their hands are outstanding.
+  const pendingItems = allItems
+    .filter((item) => !readyIds.has(item.id) && item.fulfillment_status !== 'picked_up')
+    .map(toNoticeItem);
+
+  if (readyItems.length === 0) {
+    return { success: false, error: 'Select at least one item that is ready for pickup.' };
+  }
+
+  const customerEmail = (order as any)?.profiles?.email?.trim();
+
+  if (!customerEmail) {
+    return {
+      success: false,
+      error: 'This customer has no email address on file, so they need to be told another way.',
+    };
+  }
+
+  // No customerDisplayLabel: the phone fallback the status emails use cannot apply here,
+  // since a notice is only sent when there is an email address to send it to.
+  const noticeData = {
+    orderId: data.orderId,
+    orderNumber: data.orderId.slice(0, 8).toUpperCase(),
+    customerEmail,
+    readyItems,
+    pendingItems,
+    note: data.note?.trim() || undefined,
+  };
+
+  const result = await sendEmail({
+    to: customerEmail,
+    ...customerPickupNoticeEmail(noticeData),
+  });
+
+  if (!result.success) {
+    return { success: false, error: result.error || 'Failed to send the pickup notice.' };
+  }
+
+  const adminEmails = getAdminEmails();
+  if (adminEmails.length > 0) {
+    sendEmail({
+      to: adminEmails,
+      ...adminPickupNoticeEmail(noticeData),
+    }).catch((err) => console.error('Failed to send admin pickup notice copy:', err));
+  }
+
+  // Record what the customer was just told, so it outlives whoever sent it. Only pending
+  // lines move: a line already picked up is not un-collected by mentioning it again.
+  const idsToMarkReady = allItems
+    .filter((item) => readyIds.has(item.id) && item.fulfillment_status === 'pending')
+    .map((item) => item.id);
+
+  let warning: string | undefined;
+
+  if (idsToMarkReady.length > 0) {
+    const { error: markError } = await supabase
+      .from('order_items')
+      .update({ fulfillment_status: 'ready' })
+      .in('id', idsToMarkReady);
+
+    if (markError) {
+      console.error('Pickup notice sent but marking lines ready failed:', markError);
+      warning =
+        'The email went out, but the items could not be marked ready — set them by hand below.';
+    }
+  }
+
+  // Email config missing is a silent no-op inside sendEmail, and staff would otherwise
+  // walk away believing the customer was told.
+  if (result.skipped) {
+    warning = 'Email is not configured on this environment, so nothing was actually sent.';
+  }
+
+  revalidatePath('/admin/orders');
+  revalidatePath(`/admin/orders/${data.orderId}`);
+  revalidatePath('/orders');
+  revalidatePath(`/orders/${data.orderId}`);
+
+  return { success: true, warning };
+}
+
+interface UpdateItemFulfillmentData {
+  orderId: string;
+  itemId: string;
+  status: string;
+}
+
+/**
+ * Move a single line between not-ready, ready, and picked up.
+ *
+ * Deliberately silent: the customer hears about readiness through a pickup notice they can
+ * read, not through every correction staff make to the board. It also leaves orders.status
+ * alone — an order is done when staff say it is, not when the last checkbox flips.
+ */
+export async function updateItemFulfillment(data: UpdateItemFulfillmentData) {
+  const isDevMode = !process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder');
+
+  if (isDevMode) {
+    return { success: false, error: 'Order operations require Supabase to be configured.' };
+  }
+
+  if (!ITEM_FULFILLMENT_STATUSES.includes(data.status as ItemFulfillmentStatus)) {
+    return { success: false, error: 'Invalid item status' };
+  }
+
+  const { supabase } = await requireAdmin();
+
+  // Scoped by order too, so a mistyped id cannot reach a line on someone else's order.
+  const { data: updated, error } = await supabase
+    .from('order_items')
+    .update({ fulfillment_status: data.status })
+    .eq('id', data.itemId)
+    .eq('order_id', data.orderId)
+    .select('id');
+
+  if (error) {
+    console.error('Error updating item fulfillment:', error);
+    return { success: false, error: 'Failed to update the item' };
+  }
+
+  // RLS drops a forbidden update without raising, so an empty result is the only signal
+  // that the write did not land.
+  if (!updated || updated.length === 0) {
+    return { success: false, error: 'Item not found, or you do not have permission to change it' };
+  }
+
+  revalidatePath('/admin/orders');
+  revalidatePath(`/admin/orders/${data.orderId}`);
+  revalidatePath('/orders');
+  revalidatePath(`/orders/${data.orderId}`);
+
   return { success: true };
 }
 

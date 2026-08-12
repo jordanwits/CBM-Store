@@ -9,6 +9,7 @@ import { FormattedDate } from 'core/components/FormattedDate';
 import Link from 'next/link';
 import { OrdersPeriodFilter } from './OrdersPeriodFilter';
 import { orderStatusLabel, orderStatusBadgeVariant } from '@/lib/orders/status';
+import { summarizeFulfillment } from '@/lib/orders/fulfillment';
 
 // Cache orders list for 2 minutes (orders are user-specific and update frequently)
 export const revalidate = 120;
@@ -90,6 +91,27 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
     totalCount = countResult.count || 0;
     hasMore = totalCount > currentPage * itemsPerPage;
     orders = dataResult.data || [];
+
+    // One rollup for the page on screen, so a card can say what is still outstanding
+    // without loading every line of every order.
+    if (orders.length > 0) {
+      const { data: lineStates } = await supabase
+        .from('order_items')
+        .select('order_id, fulfillment_status')
+        .in('order_id', orders.map((order: any) => order.id));
+
+      const byOrder = new Map<string, Array<{ fulfillment_status?: string | null }>>();
+      for (const line of lineStates ?? []) {
+        const bucket = byOrder.get(line.order_id) ?? [];
+        bucket.push(line);
+        byOrder.set(line.order_id, bucket);
+      }
+
+      orders = orders.map((order: any) => ({
+        ...order,
+        fulfillment: summarizeFulfillment(byOrder.get(order.id) ?? []),
+      }));
+    }
   }
 
   const totalPages = Math.ceil(totalCount / itemsPerPage);
@@ -119,6 +141,12 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
                         <Badge variant={orderStatusBadgeVariant(order.status)}>
                           {orderStatusLabel(order.status)}
                         </Badge>
+                        {order.status !== 'cancelled' && order.fulfillment?.isPartiallyFulfilled && (
+                          <Badge variant="warning">
+                            {order.fulfillment.ready + order.fulfillment.pickedUp} of{' '}
+                            {order.fulfillment.total} ready
+                          </Badge>
+                        )}
                         <span className="text-sm text-gray-500">
                           Order #{order.id.slice(0, 8).toUpperCase()}
                         </span>

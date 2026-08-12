@@ -257,6 +257,171 @@ export function adminOrderStatusEmail(order: OrderStatusData) {
   return { subject, html };
 }
 
+export interface PickupNoticeItem {
+  productName: string;
+  /** Size/color, or the variant's own name when it carries the meaning alone. */
+  variantLabel?: string | null;
+  quantity: number;
+}
+
+interface PickupNoticeData {
+  orderId: string;
+  orderNumber: string;
+  customerEmail: string;
+  /** Email, or the phone fallback the order emails already fall back to. */
+  customerDisplayLabel?: string;
+  readyItems: PickupNoticeItem[];
+  pendingItems: PickupNoticeItem[];
+  /** Free text from staff, e.g. "this is the remaining item from your June order". */
+  note?: string;
+}
+
+/**
+ * Product names and staff notes are the first email content that isn't a number or a
+ * fixed string, so an ampersand in a product name would otherwise render as broken markup.
+ */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function pickupItemListHtml(items: PickupNoticeItem[]): string {
+  const rows = items
+    .map((item) => {
+      const variant = item.variantLabel
+        ? ` <span style="color: #666;">(${escapeHtml(item.variantLabel)})</span>`
+        : '';
+      return `<li style="margin: 0 0 6px 0;">${escapeHtml(item.productName)}${variant} &times; ${item.quantity}</li>`;
+    })
+    .join('');
+
+  return `<ul style="margin: 0; padding-left: 20px;">${rows}</ul>`;
+}
+
+/**
+ * Pickup readiness, sent on its own rather than as a side effect of a status change.
+ *
+ * An order can become collectable in more than one trip — a made-to-order line is still
+ * being made while the rest sits on the shelf — so this names the items instead of
+ * announcing a single order-wide status the customer would have to interpret.
+ */
+export function customerPickupNoticeEmail(order: PickupNoticeData) {
+  const siteUrl = getSiteUrl();
+  const orderUrl = `${siteUrl}/orders/${order.orderId}`;
+
+  const hasPending = order.pendingItems.length > 0;
+
+  const subject = hasPending
+    ? `Order #${order.orderNumber} - Part of your order is ready for pickup`
+    : `Order #${order.orderNumber} - Ready for pickup`;
+
+  const headline = hasPending ? 'Part of your order is ready' : 'Your order is ready for pickup';
+
+  const intro = hasPending
+    ? 'The items below are ready to collect now. The rest of your order is still on its way, and we will email you again as soon as it arrives.'
+    : 'The items below are ready to collect at our location.';
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${subject}</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background-color: #f8f9fa; border-radius: 8px; padding: 30px; margin-bottom: 20px;">
+    <h1 style="color: #2563eb; margin: 0 0 10px 0;">${headline}</h1>
+    <p style="font-size: 16px; margin: 0; color: #666;">Order #${order.orderNumber}</p>
+  </div>
+
+  <p style="font-size: 16px; margin: 0 0 20px 0;">${intro}</p>
+
+  <div style="background-color: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+    <h2 style="font-size: 18px; margin: 0 0 15px 0; color: #059669;">Ready for pickup now</h2>
+    ${pickupItemListHtml(order.readyItems)}
+  </div>
+
+  ${hasPending ? `
+    <div style="background-color: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+      <h2 style="font-size: 18px; margin: 0 0 15px 0; color: #b45309;">Still coming</h2>
+      ${pickupItemListHtml(order.pendingItems)}
+      <p style="margin: 15px 0 0 0; font-size: 14px; color: #666;">
+        No need to wait for these — you can collect the items above whenever it suits you.
+      </p>
+    </div>
+  ` : ''}
+
+  ${order.note ? `
+    <div style="background-color: #f3f4f6; border-radius: 6px; padding: 15px; margin-bottom: 20px;">
+      <p style="margin: 0; white-space: pre-wrap;">${escapeHtml(order.note)}</p>
+    </div>
+  ` : ''}
+
+  <div style="text-align: center; margin: 30px 0;">
+    <a href="${orderUrl}" style="display: inline-block; background-color: #2563eb; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold;">View Order Details</a>
+  </div>
+
+  <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center;">
+    <p style="font-size: 12px; color: #999; margin: 0;">
+      If you have any questions, please contact our support team.
+    </p>
+  </div>
+</body>
+</html>
+  `;
+
+  return { subject, html };
+}
+
+export function adminPickupNoticeEmail(order: PickupNoticeData) {
+  const siteUrl = getSiteUrl();
+  const orderUrl = `${siteUrl}/admin/orders/${order.orderId}`;
+
+  const subject = `Pickup notice sent - #${order.orderNumber}`;
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${subject}</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background-color: #f8f9fa; border-radius: 8px; padding: 30px; margin-bottom: 20px;">
+    <h1 style="color: #2563eb; margin: 0 0 10px 0;">Pickup Notice Sent</h1>
+    <p style="font-size: 16px; margin: 0; color: #666;">
+      Order #${order.orderNumber} &mdash; ${escapeHtml(order.customerDisplayLabel || order.customerEmail)}
+    </p>
+  </div>
+
+  <div style="background-color: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+    <h2 style="font-size: 18px; margin: 0 0 15px 0;">Told they can collect</h2>
+    ${pickupItemListHtml(order.readyItems)}
+    ${order.pendingItems.length > 0 ? `
+      <h2 style="font-size: 18px; margin: 20px 0 15px 0;">Still outstanding</h2>
+      ${pickupItemListHtml(order.pendingItems)}
+    ` : ''}
+    ${order.note ? `
+      <h2 style="font-size: 18px; margin: 20px 0 15px 0;">Note included</h2>
+      <p style="margin: 0; white-space: pre-wrap;">${escapeHtml(order.note)}</p>
+    ` : ''}
+  </div>
+
+  <div style="text-align: center; margin: 30px 0;">
+    <a href="${orderUrl}" style="display: inline-block; background-color: #2563eb; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold;">View in Admin Panel</a>
+  </div>
+</body>
+</html>
+  `;
+
+  return { subject, html };
+}
+
 interface PointsAdjustmentData {
   recipientEmail: string;
   recipientName?: string;
