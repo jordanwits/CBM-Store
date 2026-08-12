@@ -119,7 +119,7 @@ export function PickupNoticeSender({ orderId, lines, isDevMode }: PickupNoticeSe
       <div className="space-y-3">
         <p className="text-gray-800">
           Tell the customer which items they can collect now. The items you pick are marked
-          ready, and the order status is left alone — so an order can be collected in stages
+          ready, and the order status is left alone, so an order can be collected in stages
           while it stays flagged as outstanding.
         </p>
         <Button variant="primary" onClick={() => setIsEditing(true)} disabled={isDevMode}>
