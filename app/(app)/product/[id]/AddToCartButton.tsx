@@ -63,14 +63,42 @@ export default function AddToCartButton({
   const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState(false);
 
+  /**
+   * Whether a customer could actually walk out with this variant today. Untracked stock never
+   * gates anything, and a made-to-order product gets made when the shelf is empty, so neither
+   * counts as unavailable. Only a tracked count of zero does.
+   */
+  const isSellable = (v: Variant) =>
+    madeToOrder ||
+    v.inventory_count === null ||
+    v.inventory_count === undefined ||
+    v.inventory_count > 0;
+
+  /**
+   * Is this size obtainable, in the given colour or in any colour when none is chosen yet?
+   *
+   * Answering with stock rather than mere existence is what keeps the page from contradicting
+   * itself. The badge above quotes the whole product ("Only 1 left" across every colour and
+   * size), so a size that is sold out in the chosen colour has to be visibly ruled out;
+   * otherwise a customer picks it and reads "Out of stock" underneath a badge promising one
+   * was left, which is true of the product and false of what they just chose.
+   */
+  const sizeAvailableIn = (size: string, color: string | undefined) =>
+    variants.some((v) => v.size === size && (!color || v.color === color) && isSellable(v));
+
+  /** A colour with nothing obtainable behind it in any size is a dead end worth ruling out. */
+  const colorHasStock = (color: string) =>
+    variants.some((v) => v.color === color && isSellable(v));
+
   // Notify parent when color changes
   const handleColorChange = (color: string) => {
     setSelectedColor(color);
     setSelectedOption(undefined);
-    // A size the product isn't made in for this colour cannot stay selected: the pair would
-    // match no variant at all, and an unmatched pair is what used to reach the cart as a
-    // bare product line with no colour, no price adjustment and the cover photo.
-    if (selectedSize && !variants.some((v) => v.color === color && v.size === selectedSize)) {
+    // A size that is unavailable in the new colour, because it is not made in it or is sold
+    // out in it, cannot stay selected: the pair would resolve to nothing sellable, and an
+    // unmatched pair is what used to reach the cart as a bare product line with no colour, no
+    // price adjustment and the cover photo.
+    if (selectedSize && !sizeAvailableIn(selectedSize, color)) {
       setSelectedSize(undefined);
     }
     if (onColorChange) {
@@ -112,16 +140,24 @@ export default function AddToCartButton({
   const hasOptions = optionVariants.length > 0;
 
   /**
-   * Whether the product is made in this size in the colour currently chosen. A shirt can
-   * come in Green in S and M only, and every size looked equally pickable, so Green + L was
-   * a dead end the page never mentioned. Sizes are gated by colour rather than the other way
-   * round because the colour picker sits first; colours stay clickable so a customer can
-   * always change their mind without getting stuck.
+   * Sizes are gated by the colour in hand rather than the other way round, because the colour
+   * picker sits first. Colours are gated only on their own stock, never on the selected size,
+   * so choosing a size can never leave every colour ruled out with no way back.
    */
-  const isSizeOffered = (size: string) =>
-    !hasColors || !selectedColor
-      ? true
-      : variants.some((v) => v.size === size && v.color === selectedColor);
+  const isSizeOffered = (size: string) => sizeAvailableIn(size, selectedColor);
+
+  /** Says which of the two reasons a size is ruled out, for the tooltip and screen readers. */
+  const sizeUnavailableReason = (size: string) => {
+    const madeInThisColor = variants.some(
+      (v) => v.size === size && (!selectedColor || v.color === selectedColor)
+    );
+
+    if (!madeInThisColor) {
+      return selectedColor ? `${size} does not come in ${selectedColor}` : `${size} is not available`;
+    }
+
+    return selectedColor ? `${size} is sold out in ${selectedColor}` : `${size} is sold out`;
+  };
 
   // Find the matching variant combination
   const selectedVariant = selectedOption
@@ -253,6 +289,8 @@ export default function AddToCartButton({
               const isSelected = selectedColor === color;
               const bgColor = colorMap[color];
               const needsBorder = color === 'White' || color === 'Silver' || color === 'Yellow';
+              const inStock = colorHasStock(color);
+              const colorTitle = inStock ? color : `${color} is sold out`;
 
               // Custom colors have no swatch to show, so label them instead
               if (!bgColor) {
@@ -260,13 +298,16 @@ export default function AddToCartButton({
                   <button
                     key={color}
                     onClick={() => handleColorChange(color)}
+                    disabled={!inStock}
                     className={`px-4 h-12 rounded-full border-2 transition-all font-semibold text-sm ${
                       isSelected
                         ? 'border-primary bg-primary text-white shadow-lg scale-105'
-                        : 'border-gray-400 hover:border-gray-600 bg-white text-gray-900'
+                        : inStock
+                        ? 'border-gray-400 hover:border-gray-600 bg-white text-gray-900'
+                        : 'border-gray-200 bg-gray-50 text-gray-400 line-through cursor-not-allowed'
                     }`}
-                    title={color}
-                    aria-label={color}
+                    title={colorTitle}
+                    aria-label={colorTitle}
                   >
                     {color}
                   </button>
@@ -277,13 +318,27 @@ export default function AddToCartButton({
                 <button
                   key={color}
                   onClick={() => handleColorChange(color)}
+                  disabled={!inStock}
                   className={`relative w-12 h-12 rounded-full transition-all ${
-                    isSelected ? 'ring-4 ring-primary ring-offset-2 scale-110' : 'hover:scale-105'
+                    isSelected
+                      ? 'ring-4 ring-primary ring-offset-2 scale-110'
+                      : inStock
+                      ? 'hover:scale-105'
+                      : 'cursor-not-allowed'
                   } ${needsBorder ? 'border-2 border-gray-300' : ''}`}
                   style={{ backgroundColor: bgColor }}
-                  title={color}
-                  aria-label={color}
+                  title={colorTitle}
+                  aria-label={colorTitle}
                 >
+                  {/* A swatch has no text to strike through, so the line is drawn across it.
+                      Full width rotated 45 degrees puts both ends exactly on the circle. The
+                      wash sits under the line rather than as opacity on the button, which
+                      would fade the line along with the colour it is meant to cancel. */}
+                  {!inStock && (
+                    <span className="absolute inset-0 flex items-center justify-center rounded-full bg-white/60 pointer-events-none">
+                      <span className="block w-full h-0.5 rounded-full bg-gray-700 rotate-45" />
+                    </span>
+                  )}
                   {isSelected && (
                     <div className="absolute -top-1 -right-1 w-5 h-5 bg-primary rounded-full flex items-center justify-center border-2 border-white shadow-lg">
                       <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -321,8 +376,8 @@ export default function AddToCartButton({
                       ? 'border-gray-400 hover:border-gray-600 bg-white text-gray-900'
                       : 'border-gray-200 bg-gray-50 text-gray-400 line-through cursor-not-allowed'
                   }`}
-                  title={offered ? size : `${size} does not come in ${selectedColor}`}
-                  aria-label={offered ? size : `${size}, not available in ${selectedColor}`}
+                  title={offered ? size : sizeUnavailableReason(size)}
+                  aria-label={offered ? size : sizeUnavailableReason(size)}
                 >
                   <span
                     className={`font-semibold text-sm ${
