@@ -6,6 +6,7 @@ import { Card, CardContent } from 'core/components/Card';
 import { Alert } from 'core/components/Alert';
 import Link from 'next/link';
 import { addToCart } from '@/lib/cart/storage';
+import { availabilityPillClasses, variantAvailability } from '@/lib/inventory/availability';
 
 // Map color names to CSS colors
 const colorMap: Record<string, string> = {
@@ -32,7 +33,8 @@ interface Variant {
   size?: string;
   color?: string;
   price_adjustment_usd: number;
-  inventory_count?: number;
+  /** Null is an untracked variant, which is not the same as a count of 0. */
+  inventory_count?: number | null;
   image_url?: string;
 }
 
@@ -65,6 +67,12 @@ export default function AddToCartButton({
   const handleColorChange = (color: string) => {
     setSelectedColor(color);
     setSelectedOption(undefined);
+    // A size the product isn't made in for this colour cannot stay selected: the pair would
+    // match no variant at all, and an unmatched pair is what used to reach the cart as a
+    // bare product line with no colour, no price adjustment and the cover photo.
+    if (selectedSize && !variants.some((v) => v.color === color && v.size === selectedSize)) {
+      setSelectedSize(undefined);
+    }
     if (onColorChange) {
       onColorChange(color);
     }
@@ -103,6 +111,18 @@ export default function AddToCartButton({
   const hasSizes = availableSizes.length > 0;
   const hasOptions = optionVariants.length > 0;
 
+  /**
+   * Whether the product is made in this size in the colour currently chosen. A shirt can
+   * come in Green in S and M only, and every size looked equally pickable, so Green + L was
+   * a dead end the page never mentioned. Sizes are gated by colour rather than the other way
+   * round because the colour picker sits first; colours stay clickable so a customer can
+   * always change their mind without getting stuck.
+   */
+  const isSizeOffered = (size: string) =>
+    !hasColors || !selectedColor
+      ? true
+      : variants.some((v) => v.size === size && v.color === selectedColor);
+
   // Find the matching variant combination
   const selectedVariant = selectedOption
     ? optionVariants.find(v => v.name === selectedOption)
@@ -124,21 +144,15 @@ export default function AddToCartButton({
     : undefined;
 
   const selectedVariantId = selectedVariant?.id;
-  
-  // Check if selected combination is in stock. Made-to-order products get made when stock
-  // runs out, so stock never gates them.
-  const isOutOfStock = !madeToOrder &&
-    selectedVariant &&
-    selectedVariant.inventory_count !== null &&
-    selectedVariant.inventory_count !== undefined &&
-    selectedVariant.inventory_count < 1;
 
-  // How much of this selection would have to be made rather than pulled off the shelf.
-  // Made-to-order sells from stock first, so a selection covered by what is on hand needs
-  // no lead-time warning. Nothing selected yet, or an untracked variant, counts as nothing
-  // on hand — better to warn and be wrong than to promise stock we can't confirm.
-  const unitsOnHand = Math.max(0, selectedVariant?.inventory_count ?? 0);
-  const unitsToMake = madeToOrder ? Math.max(0, quantity - unitsOnHand) : 0;
+  // What the store can say about this exact combination at this exact quantity. Null until
+  // something is selected, since there is nothing specific to describe yet: the product-level
+  // badge above covers that case.
+  const availability = selectedVariant
+    ? variantAvailability(selectedVariant, madeToOrder, quantity)
+    : null;
+
+  const isOutOfStock = availability?.state === 'out_of_stock';
 
   // Every dimension the product offers has a selection
   const dimensionsSatisfied =
@@ -146,10 +160,17 @@ export default function AddToCartButton({
     (!hasColors || !!selectedColor) &&
     (!hasSizes || !!selectedSize);
 
+  // A quantity the shelf cannot cover is rejected by place_points_order, so it is stopped
+  // here rather than at the end of checkout. Made-to-order lines always pass: running out
+  // means the rest gets made.
+  // The variant itself has to resolve, not just the dimensions. Satisfying every dimension
+  // proves a colour and a size were picked, never that the product is made in that pair, and
+  // adding an unresolved pair puts a line in the cart with no variant on it.
   const canAddToCart =
     !hasVariants ||
     ((hasOptions ? !!selectedOption || dimensionsSatisfied : dimensionsSatisfied) &&
-      !isOutOfStock);
+      !!selectedVariant &&
+      (availability?.sufficient ?? true));
 
   const handleAddToCart = () => {
     if (!canAddToCart) return;
@@ -173,6 +194,14 @@ export default function AddToCartButton({
   const getAvailabilityMessage = () => {
     if (isOutOfStock) {
       return 'This combination is out of stock';
+    }
+    if (availability && !availability.sufficient) {
+      return `Only ${availability.unitsOnHand} left`;
+    }
+    if (dimensionsSatisfied && !selectedVariant) {
+      return selectedColor && selectedSize
+        ? `${selectedSize} does not come in ${selectedColor}`
+        : 'That combination is not available';
     }
     if (!canAddToCart && hasColors && !selectedColor) {
       return 'Please select a color';
@@ -278,20 +307,28 @@ export default function AddToCartButton({
           <div className="flex flex-wrap gap-3">
             {availableSizes.map((size) => {
               const isSelected = selectedSize === size;
-              
+              const offered = isSizeOffered(size);
+
               return (
                 <button
                   key={size}
                   onClick={() => handleSizeChange(size)}
+                  disabled={!offered}
                   className={`relative h-12 min-w-[3rem] px-3 rounded-full border-2 transition-all flex items-center justify-center ${
                     isSelected
                       ? 'border-primary bg-primary text-white shadow-lg scale-110'
-                      : 'border-gray-400 hover:border-gray-600 bg-white text-gray-900'
+                      : offered
+                      ? 'border-gray-400 hover:border-gray-600 bg-white text-gray-900'
+                      : 'border-gray-200 bg-gray-50 text-gray-400 line-through cursor-not-allowed'
                   }`}
-                  title={size}
-                  aria-label={size}
+                  title={offered ? size : `${size} does not come in ${selectedColor}`}
+                  aria-label={offered ? size : `${size}, not available in ${selectedColor}`}
                 >
-                  <span className={`font-semibold text-sm ${isSelected ? 'text-white' : 'text-gray-900'}`}>
+                  <span
+                    className={`font-semibold text-sm ${
+                      isSelected ? 'text-white' : offered ? 'text-gray-900' : 'text-gray-400'
+                    }`}
+                  >
                     {size}
                   </span>
                   {isSelected && (
@@ -368,15 +405,22 @@ export default function AddToCartButton({
 
       {/* Price Summary & Add to Cart */}
       <div className="pt-4 border-t space-y-4">
-        {unitsToMake > 0 && (
-          <div className="rounded-md bg-primary/5 border border-primary/20 p-3">
-            <p className="text-sm font-semibold text-gray-900">Made to order</p>
-            <p className="text-sm text-gray-700 mt-0.5">
-              {unitsToMake < quantity
-                ? `We have ${quantity - unitsToMake} of these on hand. We'll order the other ${unitsToMake} once you place your order.`
-                : "We don't have this one on hand. We'll order it once you place your order."}{' '}
-              See the product details for lead time.
-            </p>
+        {availability && availability.state !== 'in_stock' && (
+          <div className="rounded-md bg-gray-50 border border-gray-200 p-3">
+            <span
+              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${availabilityPillClasses(
+                availability.tone
+              )}`}
+            >
+              {availability.label}
+            </span>
+            {availability.detail && (
+              <p className="text-sm text-gray-700 mt-1.5">
+                {availability.detail}
+                {availability.state === 'made_to_order' &&
+                  ' See the product details for lead time.'}
+              </p>
+            )}
           </div>
         )}
 

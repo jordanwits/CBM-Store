@@ -13,6 +13,12 @@ import { getCart, updateCartItemQuantity, removeFromCart, clearCart } from '@/li
 import type { CartItemWithDetails, CartItem } from '@/lib/cart/types';
 import { getCartProductData, getCartBalances } from './actions';
 import { allocateCheckoutSpend, isCbmCollectionProduct } from '@/lib/points/buckets';
+import {
+  availabilityPillClasses,
+  variantAvailability,
+  VARIANT_UNAVAILABLE,
+} from '@/lib/inventory/availability';
+import { resolveVariantImage } from '@/lib/products/variant-image';
 
 interface CartPageClientProps {
   isDevMode: boolean;
@@ -31,6 +37,41 @@ const mockProducts = [
   { id: '3', name: 'Laptop Backpack', base_usd: 75.0, images: ['/1200W-18684-Black-0-NKDH7709BlackBagFront3.jpg'], collections: [] },
   { id: '4', name: 'Wireless Mouse', base_usd: 45.0, images: ['/b43457a0-76b6-11f0-9faf-5258f188704a.png'], collections: [] },
   { id: '5', name: 'Notebook Set', base_usd: 20.0, images: ['/moleskine-classic-hardcover-notebook-black.webp'], collections: [] },
+];
+
+// Variants only exist in dev mode as fixtures, but they have to carry colours, images and
+// counts or the cart cannot show either half of what this page is for: the image that
+// matches the chosen colour, and the stock band. 'Medium - Blue' deliberately has no image
+// of its own, so it exercises the fall back to another variant in the same colour.
+const mockVariants = [
+  {
+    id: 'v5',
+    product_id: '1',
+    name: 'Small - Blue',
+    size: 'S',
+    color: 'Blue',
+    price_adjustment_usd: 0,
+    image_url: '/tshirt blue.png',
+    inventory_count: 2,
+  },
+  {
+    id: 'v6',
+    product_id: '1',
+    name: 'Medium - Blue',
+    size: 'M',
+    color: 'Blue',
+    price_adjustment_usd: 0,
+    inventory_count: 1,
+  },
+  {
+    id: 'v10',
+    product_id: '2',
+    name: 'Blue',
+    color: 'Blue',
+    price_adjustment_usd: 0,
+    image_url: '/Bottle blue.png',
+    inventory_count: 0,
+  },
 ];
 
 export default function CartPageClient({ isDevMode }: CartPageClientProps) {
@@ -57,6 +98,7 @@ export default function CartPageClient({ isDevMode }: CartPageClientProps) {
 
     if (isDevMode) {
       products = mockProducts;
+      variants = mockVariants;
       setUniversalBalance(2000);
       setRestrictedBalance(500);
       setCanCheckAffordability(true);
@@ -96,6 +138,7 @@ export default function CartPageClient({ isDevMode }: CartPageClientProps) {
         : 0;
       const pointsPerItem = basePoints + variantAdjustment;
       const cbmCollectionEligible = isCbmCollectionProduct(product.collections);
+      const productVariants = variants.filter((v) => v.product_id === item.productId);
 
       return {
         ...item,
@@ -103,8 +146,12 @@ export default function CartPageClient({ isDevMode }: CartPageClientProps) {
         variantName: variant?.name,
         pointsPerItem,
         totalPoints: pointsPerItem * item.quantity,
-        imageUrl: product.images?.[0],
+        imageUrl: resolveVariantImage(product.images, variant, productVariants),
         cbmCollectionEligible,
+        availability:
+          item.variantId && !variant
+            ? VARIANT_UNAVAILABLE
+            : variantAvailability(variant, product.made_to_order ?? false, item.quantity),
       };
     });
 
@@ -249,6 +296,18 @@ export default function CartPageClient({ isDevMode }: CartPageClientProps) {
                       </Link>
                       {item.variantName && (
                         <p className="text-sm text-gray-600 mt-1">Option: {item.variantName}</p>
+                      )}
+                      {item.availability && (
+                        <span
+                          className={`inline-flex items-center mt-2 px-2 py-0.5 rounded-full text-xs font-medium ${availabilityPillClasses(
+                            item.availability.tone
+                          )}`}
+                        >
+                          {item.availability.label}
+                        </span>
+                      )}
+                      {item.availability?.detail && (
+                        <p className="text-sm text-gray-700 mt-1">{item.availability.detail}</p>
                       )}
                       <p className="text-sm text-gray-500 mt-1">
                         {item.pointsPerItem.toLocaleString()} points each

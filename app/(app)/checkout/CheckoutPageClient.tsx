@@ -14,6 +14,12 @@ import type { CartItemWithDetails } from '@/lib/cart/types';
 import Image from 'next/image';
 import { getCheckoutData } from './actions';
 import { allocateCheckoutSpend, isCbmCollectionProduct } from '@/lib/points/buckets';
+import {
+  availabilityPillClasses,
+  variantAvailability,
+  VARIANT_UNAVAILABLE,
+} from '@/lib/inventory/availability';
+import { resolveVariantImage } from '@/lib/products/variant-image';
 
 interface CheckoutPageClientProps {
   isDevMode: boolean;
@@ -24,8 +30,43 @@ const mockProducts = [
   { id: '1', name: 'Company Logo T-Shirt', base_usd: 25.0, images: ['/ChrisCrossBlackCottonT-Shirt.webp'], collections: ['CBM', 'Essentials'] },
   { id: '2', name: 'Insulated Water Bottle', base_usd: 35.0, images: ['/KiyoUVC-Bottle_Studio_Fullsize-500ml_Black_C2_4480x.jpg'], collections: [] },
   { id: '3', name: 'Laptop Backpack', base_usd: 75.0, images: ['/1200W-18684-Black-0-NKDH7709BlackBagFront3.jpg'], collections: [] },
-  { id: '4', name: 'Wireless Mouse', base_usd: 45.0, images: ['/b43457a0-76b6-11f0-9faf-5258f188704a.png'], collections: [] },
+  { id: '4', name: 'Wireless Mouse', base_usd: 45.0, images: ['/b43457a0-76b6-11f0-9faf-5258f188704a.png'], collections: [], made_to_order: true },
   { id: '5', name: 'Notebook Set', base_usd: 20.0, images: ['/moleskine-classic-hardcover-notebook-black.webp'], collections: [] },
+];
+
+// Variants only exist in dev mode as fixtures, but they have to carry colours, images and
+// counts or the cart cannot show either half of what this page is for: the image that
+// matches the chosen colour, and the stock band. 'Medium - Blue' deliberately has no image
+// of its own, so it exercises the fall back to another variant in the same colour.
+const mockVariants = [
+  {
+    id: 'v5',
+    product_id: '1',
+    name: 'Small - Blue',
+    size: 'S',
+    color: 'Blue',
+    price_adjustment_usd: 0,
+    image_url: '/tshirt blue.png',
+    inventory_count: 2,
+  },
+  {
+    id: 'v6',
+    product_id: '1',
+    name: 'Medium - Blue',
+    size: 'M',
+    color: 'Blue',
+    price_adjustment_usd: 0,
+    inventory_count: 1,
+  },
+  {
+    id: 'v10',
+    product_id: '2',
+    name: 'Blue',
+    color: 'Blue',
+    price_adjustment_usd: 0,
+    image_url: '/Bottle blue.png',
+    inventory_count: 0,
+  },
 ];
 
 export default function CheckoutPageClient({
@@ -58,6 +99,7 @@ export default function CheckoutPageClient({
 
     if (isDevMode) {
       products = mockProducts;
+      variants = mockVariants;
     } else {
       const data = await getCheckoutData(cart.items);
       products = data.products;
@@ -94,6 +136,7 @@ export default function CheckoutPageClient({
         : 0;
     const pointsPerItem = basePoints + variantAdjustment;
     const cbmCollectionEligible = isCbmCollectionProduct(product.collections);
+    const productVariants = variants.filter((v) => v.product_id === item.productId);
 
     return {
       ...item,
@@ -101,8 +144,12 @@ export default function CheckoutPageClient({
       variantName: variant?.name,
       pointsPerItem,
       totalPoints: pointsPerItem * item.quantity,
-      imageUrl: product.images?.[0],
+      imageUrl: resolveVariantImage(product.images, variant, productVariants),
       cbmCollectionEligible,
+      availability:
+        item.variantId && !variant
+          ? VARIANT_UNAVAILABLE
+          : variantAvailability(variant, product.made_to_order ?? false, item.quantity),
     };
     });
 
@@ -128,6 +175,14 @@ export default function CheckoutPageClient({
   );
   const hasInsufficientPoints = !spendPlan.canAfford;
 
+  // Lines place_points_order would reject outright. Saying so before the customer commits
+  // beats letting them press the button and reading a raw stock error back.
+  const unavailableItems = cartItems.filter((item) => item.availability?.sufficient === false);
+  const hasUnavailableItems = unavailableItems.length > 0;
+  const madeToOrderItems = cartItems.filter(
+    (item) => item.availability?.state === 'made_to_order'
+  );
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -140,6 +195,13 @@ export default function CheckoutPageClient({
     if (hasInsufficientPoints) {
       setError(
         'Insufficient points for this order. CBM points apply to CBM collection items first; universal points cover the rest.'
+      );
+      return;
+    }
+
+    if (hasUnavailableItems) {
+      setError(
+        'Some items in your order are no longer available in the quantity you selected. Go back to your cart to adjust them.'
       );
       return;
     }
@@ -247,6 +309,18 @@ export default function CheckoutPageClient({
                           <p className="text-sm text-gray-600">{item.variantName}</p>
                         )}
                         <p className="text-sm text-gray-500">Qty: {item.quantity}</p>
+                        {item.availability && (
+                          <span
+                            className={`inline-flex items-center mt-1 px-2 py-0.5 rounded-full text-xs font-medium ${availabilityPillClasses(
+                              item.availability.tone
+                            )}`}
+                          >
+                            {item.availability.label}
+                          </span>
+                        )}
+                        {item.availability?.detail && (
+                          <p className="text-xs text-gray-700 mt-1">{item.availability.detail}</p>
+                        )}
                         {item.cbmCollectionEligible && (
                           <p className="text-xs text-primary font-medium mt-0.5">
                             CBM collection: CBM points apply first
@@ -341,6 +415,25 @@ export default function CheckoutPageClient({
                   </div>
                 </div>
 
+                {hasUnavailableItems && (
+                  <Alert variant="error" className="mb-4" title="Some items are not available">
+                    <p className="text-xs">
+                      {unavailableItems.map((item) => item.productName).join(', ')} cannot be
+                      ordered in the quantity you selected. Adjust your cart to continue.
+                    </p>
+                  </Alert>
+                )}
+
+                {!hasUnavailableItems && madeToOrderItems.length > 0 && (
+                  <Alert variant="info" className="mb-4" title="Part of this order is made to order">
+                    <p className="text-xs">
+                      {madeToOrderItems.map((item) => item.productName).join(', ')} will be
+                      ordered for you once you place this order, so it will not be ready to
+                      collect at the same time as the rest.
+                    </p>
+                  </Alert>
+                )}
+
                 {error && (
                   <Alert variant="error" className="mb-4">
                     {error}
@@ -360,7 +453,9 @@ export default function CheckoutPageClient({
                     type="submit"
                     variant="primary"
                     className="w-full h-12 text-base font-semibold"
-                    disabled={isSubmitting || hasInsufficientPoints || isDevMode}
+                    disabled={
+                      isSubmitting || hasInsufficientPoints || hasUnavailableItems || isDevMode
+                    }
                   >
                     {isSubmitting ? (
                       <span className="flex items-center justify-center gap-2">

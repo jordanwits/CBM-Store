@@ -60,6 +60,7 @@ export default async function ProductDetailPage({
         base_usd: 45.00,
         images: ['/b43457a0-76b6-11f0-9faf-5258f188704a.png'],
         active: true,
+        made_to_order: true,
       },
       {
         id: '5',
@@ -73,25 +74,25 @@ export default async function ProductDetailPage({
     
     product = mockProducts.find((p) => p.id === id);
     
-    // Mock variants for the t-shirt (sizes and colors)
+    // Mock variants for the t-shirt (sizes and colors). Counts match the dashboard
+    // fixtures so the catalog band and the product page agree in dev mode. Blue is
+    // deliberately made in S and M only, so the size picker has a pair to rule out.
     if (id === '1') {
       variants = [
-        { id: 'v1', product_id: '1', name: 'Small - Black', size: 'S', color: 'Black', price_adjustment_usd: 0, active: true },
-        { id: 'v2', product_id: '1', name: 'Medium - Black', size: 'M', color: 'Black', price_adjustment_usd: 0, active: true },
-        { id: 'v3', product_id: '1', name: 'Large - Black', size: 'L', color: 'Black', price_adjustment_usd: 0, active: true },
-        { id: 'v4', product_id: '1', name: 'X-Large - Black', size: 'XL', color: 'Black', price_adjustment_usd: 0, active: true },
-        { id: 'v5', product_id: '1', name: 'Small - Blue', size: 'S', color: 'Blue', price_adjustment_usd: 0, active: true },
-        { id: 'v6', product_id: '1', name: 'Medium - Blue', size: 'M', color: 'Blue', price_adjustment_usd: 0, active: true },
-        { id: 'v7', product_id: '1', name: 'Large - Blue', size: 'L', color: 'Blue', price_adjustment_usd: 0, active: true },
-        { id: 'v8', product_id: '1', name: 'X-Large - Blue', size: 'XL', color: 'Blue', price_adjustment_usd: 0, active: true },
+        { id: 'v1', product_id: '1', name: 'Small - Black', size: 'S', color: 'Black', price_adjustment_usd: 0, active: true, inventory_count: 0 },
+        { id: 'v2', product_id: '1', name: 'Medium - Black', size: 'M', color: 'Black', price_adjustment_usd: 0, active: true, inventory_count: 0 },
+        { id: 'v3', product_id: '1', name: 'Large - Black', size: 'L', color: 'Black', price_adjustment_usd: 0, active: true, inventory_count: 0 },
+        { id: 'v4', product_id: '1', name: 'X-Large - Black', size: 'XL', color: 'Black', price_adjustment_usd: 0, active: true, inventory_count: 0 },
+        { id: 'v5', product_id: '1', name: 'Small - Blue', size: 'S', color: 'Blue', price_adjustment_usd: 0, active: true, inventory_count: 2 },
+        { id: 'v6', product_id: '1', name: 'Medium - Blue', size: 'M', color: 'Blue', price_adjustment_usd: 0, active: true, inventory_count: 1 },
       ];
     }
     // Mock variants for water bottle (colors only)
     if (id === '2') {
       variants = [
-        { id: 'v9', product_id: '2', name: 'Black', color: 'Black', price_adjustment_usd: 0, active: true },
-        { id: 'v10', product_id: '2', name: 'Blue', color: 'Blue', price_adjustment_usd: 0, active: true },
-        { id: 'v11', product_id: '2', name: 'Silver', color: 'Silver', price_adjustment_usd: 0, active: true },
+        { id: 'v9', product_id: '2', name: 'Black', color: 'Black', price_adjustment_usd: 0, active: true, inventory_count: 0 },
+        { id: 'v10', product_id: '2', name: 'Blue', color: 'Blue', price_adjustment_usd: 0, active: true, inventory_count: 0 },
+        { id: 'v11', product_id: '2', name: 'Silver', color: 'Silver', price_adjustment_usd: 0, active: true, inventory_count: 0 },
       ];
     }
   } else {

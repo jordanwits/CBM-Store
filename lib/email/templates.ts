@@ -10,6 +10,12 @@ interface OrderData {
   totalPoints: number;
   itemCount: number;
   createdAt: string;
+  /**
+   * Names of the lines the store has to order in rather than pick off a shelf. The
+   * confirmation is the only message a customer is guaranteed to read, so it is where the
+   * wait has to be said out loud.
+   */
+  madeToOrderItems?: string[];
 }
 
 interface OrderStatusData extends OrderData {
@@ -22,7 +28,26 @@ export function customerOrderConfirmationEmail(order: OrderData) {
   const orderUrl = `${siteUrl}/orders/${order.orderId}`;
   
   const subject = `Order Confirmation - #${order.orderNumber}`;
-  
+
+  // Phrased so it reads correctly whether one line is made to order or the whole order is:
+  // "anything else" covers the case where there is nothing else.
+  const madeToOrder = order.madeToOrderItems || [];
+  const single = madeToOrder.length === 1;
+  const madeToOrderSection = madeToOrder.length === 0 ? '' : `
+  <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+    <h2 style="font-size: 18px; margin: 0 0 10px 0; color: #1e3a8a;">This order includes made-to-order items</h2>
+    <p style="margin: 0 0 10px 0; color: #1e3a8a;">
+      We don't keep ${single ? 'this item' : 'these items'} on hand, so we'll order ${single ? 'it' : 'them'} for you now:
+    </p>
+    <ul style="margin: 0 0 10px 0; padding-left: 20px; color: #1e3a8a;">
+      ${madeToOrder.map((name) => `<li>${name}</li>`).join('')}
+    </ul>
+    <p style="margin: 0; color: #1e3a8a;">
+      We'll email you when ${single ? 'it arrives' : 'they arrive'}. Anything else in your order can be collected as soon as it's ready.
+    </p>
+  </div>
+  `;
+
   const html = `
 <!DOCTYPE html>
 <html>
@@ -63,6 +88,7 @@ export function customerOrderConfirmationEmail(order: OrderData) {
     </table>
   </div>
   
+  ${madeToOrderSection}
   <div style="text-align: center; margin: 30px 0;">
     <a href="${orderUrl}" style="display: inline-block; background-color: #2563eb; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold;">View Order Details</a>
   </div>

@@ -5,6 +5,7 @@ import { Card, CardContent } from 'core/components/Card';
 import { Badge } from 'core/components/Badge';
 import AddToCartButton from './AddToCartButton';
 import ImageGallery from './ImageGallery';
+import { availabilityBadgeVariant, productAvailability } from '@/lib/inventory/availability';
 
 interface Variant {
   id: string;
@@ -12,6 +13,7 @@ interface Variant {
   size?: string;
   color?: string;
   price_adjustment_usd: number;
+  inventory_count?: number | null;
   image_url?: string;
 }
 
@@ -29,6 +31,10 @@ export default function ProductPageClient({
   conversionRate,
 }: ProductPageClientProps) {
   const [selectedColor, setSelectedColor] = useState<string | undefined>();
+
+  // Before a variant is picked, the honest claim is about the product as a whole. Picking
+  // one narrows it, and AddToCartButton takes over from there.
+  const availability = productAvailability(variants, product.made_to_order ?? false);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
@@ -50,11 +56,14 @@ export default function ProductPageClient({
             <span className="text-lg text-gray-600">points</span>
           </div>
 
-          {product.made_to_order ? (
-            <Badge variant="primary">Made to Order</Badge>
-          ) : (
-            <Badge variant="secondary">In Stock</Badge>
-          )}
+          <div className="space-y-2">
+            <Badge variant={availabilityBadgeVariant(availability.tone)}>
+              {availability.label}
+            </Badge>
+            {availability.detail && (
+              <p className="text-sm text-gray-700">{availability.detail}</p>
+            )}
+          </div>
         </div>
 
         <Card className="mb-6">

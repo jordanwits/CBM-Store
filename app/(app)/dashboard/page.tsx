@@ -8,7 +8,13 @@ import { StorefrontControls } from './StorefrontControls';
 import { SuggestProductButton } from './SuggestProductButton';
 import { FilterPanel } from './FilterPanel';
 import { FilterDrawer } from 'core/components/FilterDrawer';
-import { getStoreSettings, getFilterMetadata } from '@/lib/cache/store-data';
+import {
+  getStoreSettings,
+  getFilterMetadata,
+  getVariantStockSummary,
+  groupStockByProduct,
+} from '@/lib/cache/store-data';
+import { availabilityPillClasses, productAvailability } from '@/lib/inventory/availability';
 import { parsePointsBalancesRpc } from '@/lib/points/buckets';
 
 // Enable aggressive caching: Revalidate this page every 5 minutes
@@ -72,6 +78,8 @@ export default async function DashboardPage({
   let allCollections: string[] = [];
   let allSizes: string[] = [];
   let allColors: string[] = [];
+  // Stock behind each card, keyed by product.
+  let stockByProduct = new Map<string, Array<{ inventory_count: number | null }>>();
   
   if (isDevMode) {
     // Mock data for dev mode
@@ -116,6 +124,7 @@ export default async function DashboardPage({
         base_usd: 45.00,
         images: ['/b43457a0-76b6-11f0-9faf-5258f188704a.png'],
         active: true,
+        made_to_order: true,
         category: 'Electronics',
         collections: ['Premium', 'Electronics'],
       },
@@ -131,19 +140,25 @@ export default async function DashboardPage({
       },
     ];
 
+    // Counts are set so dev mode shows every stock band the real store can produce: the
+    // t-shirt runs low, the bottle is sold out, the mouse is made to order, and the products
+    // with no variants have nowhere to track stock and so read as plainly available. Blue is
+    // made in S and M only, so the size picker has a pair to rule out.
     const mockVariants = [
-      { product_id: '1', size: 'S', color: 'Blue' },
-      { product_id: '1', size: 'M', color: 'Blue' },
-      { product_id: '1', size: 'L', color: 'Blue' },
-      { product_id: '1', size: 'XL', color: 'Blue' },
-      { product_id: '1', size: 'S', color: 'Black' },
-      { product_id: '1', size: 'M', color: 'Black' },
-      { product_id: '1', size: 'L', color: 'Black' },
-      { product_id: '1', size: 'XL', color: 'Black' },
-      { product_id: '2', color: 'Blue' },
-      { product_id: '2', color: 'Black' },
-      { product_id: '2', color: 'Silver' },
+      { product_id: '1', size: 'S', color: 'Blue', inventory_count: 2 },
+      { product_id: '1', size: 'M', color: 'Blue', inventory_count: 1 },
+      { product_id: '1', size: 'S', color: 'Black', inventory_count: 0 },
+      { product_id: '1', size: 'M', color: 'Black', inventory_count: 0 },
+      { product_id: '1', size: 'L', color: 'Black', inventory_count: 0 },
+      { product_id: '1', size: 'XL', color: 'Black', inventory_count: 0 },
+      { product_id: '2', color: 'Blue', inventory_count: 0 },
+      { product_id: '2', color: 'Black', inventory_count: 0 },
+      { product_id: '2', color: 'Silver', inventory_count: 0 },
     ];
+
+    stockByProduct = groupStockByProduct(
+      mockVariants.map((v) => ({ product_id: v.product_id, inventory_count: v.inventory_count }))
+    );
     
     // Apply filters to mock data
     products = mockProducts.filter(p => {
@@ -228,12 +243,15 @@ export default async function DashboardPage({
 
     // Run initial queries in parallel for faster loading
     // Using cached functions for settings and filters (data that rarely changes)
-    const [pointsResult, balancesResult, settings, filters] = await Promise.all([
+    const [pointsResult, balancesResult, settings, filters, stockRows] = await Promise.all([
       supabase.rpc('get_user_points_balance', { p_user_id: userId }),
       supabase.rpc('get_user_points_balances', { p_user_id: userId }),
       getStoreSettings(),
       getFilterMetadata(),
+      getVariantStockSummary(),
     ]);
+
+    stockByProduct = groupStockByProduct(stockRows);
 
     legacyPointsBalance = pointsResult.data || 0;
     if (!balancesResult.error && balancesResult.data != null) {
@@ -255,7 +273,9 @@ export default async function DashboardPage({
     // Build product query with filters
     let query = supabase
       .from('products')
-      .select('id, name, description, base_usd, images, active, category, collections, created_at')
+      .select(
+        'id, name, description, base_usd, images, active, category, collections, created_at, made_to_order'
+      )
       .eq('active', true);
 
     // Apply category filter
@@ -508,6 +528,10 @@ export default async function DashboardPage({
               const pointsPrice = Math.round(product.base_usd * conversionRate);
               const isNew = product.collections?.includes('New Arrivals');
               const isCustomOrder = product.collections?.includes('Custom Order');
+              const availability = productAvailability(
+                stockByProduct.get(product.id),
+                product.made_to_order ?? false
+              );
 
               return (
                 <Link key={product.id} href={`/product/${product.id}`} className="group">
@@ -556,7 +580,16 @@ export default async function DashboardPage({
                       {product.category && (
                         <p className="text-sm text-gray-500">{product.category}</p>
                       )}
-                      
+
+                      {/* Stock band */}
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${availabilityPillClasses(
+                          availability.tone
+                        )}`}
+                      >
+                        {availability.label}
+                      </span>
+
                       {/* Price */}
                       <p className="text-base font-bold text-secondary pt-1">
                         {pointsPrice.toLocaleString()} points

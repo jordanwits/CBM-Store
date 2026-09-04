@@ -17,7 +17,9 @@ import {
   itemFulfillmentLabel,
   itemFulfillmentPillClasses,
   summarizeFulfillment,
+  unitsToMake,
 } from '@/lib/orders/fulfillment';
+import { resolveVariantImage } from '@/lib/products/variant-image';
 
 export default async function OrderDetailPage({
   params,
@@ -71,6 +73,8 @@ export default async function OrderDetailPage({
         id: 'item-3',
         product_id: '5',
         product_name: 'Coffee Mug',
+        made_to_order: true,
+        units_from_stock: 0,
         product_image: 'https://images.unsplash.com/photo-1514228742587-6b1558fcca3d?w=400&h=400&fit=crop&q=80',
         variant_name: null,
         quantity: 1,
@@ -101,7 +105,7 @@ export default async function OrderDetailPage({
       supabase
         .from('order_items')
         .select(
-          'id, order_id, product_id, product_name, variant_name, quantity, points_per_item, total_points, fulfillment_status, products(images)'
+          'id, order_id, product_id, variant_id, product_name, variant_name, variant_size, variant_color, quantity, units_from_stock, made_to_order, points_per_item, total_points, fulfillment_status, products(images), product_variants(color, image_url)'
         )
         .eq('order_id', id),
     ]);
@@ -116,11 +120,45 @@ export default async function OrderDetailPage({
     }
 
     order = orderResult.data;
-    items = (itemsResult.data || []).map((item: any) => ({
+    const rawItems = itemsResult.data || [];
+
+    // Colour siblings for the image fallback: a variant added one at a time often carries no
+    // image of its own while another variant in the same colour does. Only active variants
+    // are readable here (RLS), which is also why the embedded variant can come back null for
+    // a line whose variant has since been retired. Both cases fall through to the cover photo.
+    const orderProductIds = [
+      ...new Set(rawItems.map((item: any) => item.product_id).filter(Boolean)),
+    ];
+    let colorSiblings: any[] = [];
+
+    if (orderProductIds.length > 0) {
+      const { data: siblingData } = await supabase
+        .from('product_variants')
+        .select('product_id, color, image_url')
+        .in('product_id', orderProductIds)
+        .not('image_url', 'is', null);
+      colorSiblings = siblingData || [];
+    }
+
+    items = rawItems.map((item: any) => ({
       ...item,
-      product_image: item.products?.images?.[0] ?? null,
+      product_image:
+        resolveVariantImage(
+          item.products?.images,
+          {
+            // The line's own snapshot outranks the live variant: the colour it was bought in
+            // is what the customer should see, whatever the variant says today.
+            color: item.variant_color ?? item.product_variants?.color,
+            image_url: item.product_variants?.image_url,
+          },
+          colorSiblings.filter((v: any) => v.product_id === item.product_id)
+        ) ?? null,
     }));
   }
+
+  // What the store is procuring for each line. A made-to-order line draws from stock first
+  // (033), so this is the part actually being ordered, not necessarily the whole line.
+  items = items.map((item: any) => ({ ...item, units_being_made: unitsToMake(item) }));
 
   const fulfillment = summarizeFulfillment(items);
   const showFulfillmentDetail = order.status !== 'cancelled' && fulfillment.isPartiallyFulfilled;
@@ -325,6 +363,17 @@ export default async function OrderDetailPage({
                           : itemFulfillmentLabel(item.fulfillment_status)}
                       </span>
                     )}
+                    {item.units_being_made > 0 &&
+                      item.fulfillment_status !== 'ready' &&
+                      item.fulfillment_status !== 'picked_up' && (
+                        <p className="text-sm text-blue-900 bg-blue-50 border border-blue-200 rounded-md px-3 py-2 mb-2">
+                          {item.units_being_made < item.quantity
+                            ? `We're ordering ${item.units_being_made} of these for you. The other ${
+                                item.quantity - item.units_being_made
+                              } came from our shelf, so this line will be ready in stages.`
+                            : "We're ordering this one for you, so it won't be ready to collect as quickly as the rest of your order."}
+                        </p>
+                      )}
                     <div className="space-y-1">
                       {item.variant_name && (
                         <p className="text-sm text-gray-600 flex items-center gap-2">

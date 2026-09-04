@@ -1,7 +1,7 @@
 'use server';
 
 import { requireAdmin } from '@/lib/auth/require-admin';
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, revalidateTag } from 'next/cache';
 import { sendEmail, getAdminEmails } from '@/lib/email/resend';
 import {
   customerOrderStatusEmail,
@@ -482,6 +482,13 @@ export async function refundOrder(
         }
       }
     }
+  }
+
+  // Returned units go back on the shelf, and the storefront now quotes stock to customers,
+  // so the cached variant rows behind the catalog and product pages have to be dropped with
+  // them. Only the return path touches inventory; a plain cancellation leaves it alone.
+  if (options.withReturn) {
+    revalidateTag('product-variants');
   }
 
   // Mark order as cancelled

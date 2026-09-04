@@ -2,11 +2,12 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { getJwtSubject } from '@/lib/auth/jwt';
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, revalidateTag } from 'next/cache';
 import type { Cart, CartItem } from '@/lib/cart/types';
 import { sendEmail, getAdminEmails } from '@/lib/email/resend';
 import { customerOrderConfirmationEmail, adminNewOrderEmail } from '@/lib/email/templates';
 import { getStoreSettings, getProductsByIds, getVariantsByProductIds } from '@/lib/cache/store-data';
+import { unitsToMake } from '@/lib/orders/fulfillment';
 import { parsePointsBalancesRpc } from '@/lib/points/buckets';
 
 interface PlaceOrderResult {
@@ -181,6 +182,11 @@ export async function placeOrder(formData: FormData): Promise<PlaceOrderResult> 
     }
 
     // Revalidate affected routes
+    // place_points_order draws stock down, and the storefront now quotes stock back to the
+    // customer, so the cached variant rows behind the catalog, product page and cart have to
+    // go with it. Without this a sold-out variant keeps advertising itself for five minutes.
+    revalidateTag('product-variants');
+
     revalidatePath('/dashboard');
     revalidatePath('/orders');
     revalidatePath(`/orders/${orderId}`);
@@ -199,6 +205,18 @@ export async function placeOrder(formData: FormData): Promise<PlaceOrderResult> 
       if (orderDetails) {
         const orderNumber = orderId.slice(0, 8).toUpperCase();
         const customerTo = user.email?.trim();
+
+        // Read the lines back rather than the cart: the RPC decides how much of each line
+        // came off the shelf, so only it knows what is actually being ordered in.
+        const { data: orderLines } = await supabase
+          .from('order_items')
+          .select('product_name, quantity, units_from_stock, made_to_order')
+          .eq('order_id', orderId);
+
+        const madeToOrderItems = (orderLines || [])
+          .filter((line) => unitsToMake(line) > 0)
+          .map((line) => line.product_name);
+
         const emailData = {
           orderId: orderId,
           orderNumber,
@@ -206,6 +224,7 @@ export async function placeOrder(formData: FormData): Promise<PlaceOrderResult> 
           totalPoints: orderDetails.total_points,
           itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
           createdAt: orderDetails.created_at,
+          madeToOrderItems,
         };
         if (customerTo) {
           sendEmail({
