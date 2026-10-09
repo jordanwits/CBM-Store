@@ -44,7 +44,7 @@ export default async function OrderDetailPage({
       universal_points_used: 7500,
       status: 'processing',
       created_at: new Date(Date.now() - 2 * 86400000).toISOString(),
-      notes: null,
+      customer_note: null,
     };
     items = [
       {
@@ -97,7 +97,7 @@ export default async function OrderDetailPage({
       supabase
         .from('orders')
         .select(
-          'id, user_id, status, total_points, restricted_points_used, universal_points_used, tracking_number, notes, created_at'
+          'id, user_id, status, total_points, restricted_points_used, universal_points_used, tracking_number, customer_note, created_at'
         )
         .eq('id', id)
         .eq('user_id', userId)
@@ -432,19 +432,20 @@ export default async function OrderDetailPage({
         </CardContent>
       </Card>
 
-      {/* Order Notes */}
-      {order.notes && (
+      {/* The customer's own checkout note. Staff notes (orders.notes) are internal and are
+          deliberately never selected for this page. */}
+      {order.customer_note && (
         <Card className="mt-6">
           <CardHeader className="bg-gradient-to-r from-yellow-50 to-yellow-100 border-b">
             <h2 className="text-lg font-semibold flex items-center gap-2 text-gray-900">
               <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
               </svg>
-              Order Notes
+              Your note
             </h2>
           </CardHeader>
           <CardContent>
-            <p className="text-gray-700 leading-relaxed">{order.notes}</p>
+            <p className="text-gray-700 leading-relaxed whitespace-pre-wrap break-words">{order.customer_note}</p>
           </CardContent>
         </Card>
       )}

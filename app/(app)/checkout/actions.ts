@@ -3,11 +3,13 @@
 import { createClient } from '@/lib/supabase/server';
 import { getJwtSubject } from '@/lib/auth/jwt';
 import { revalidatePath, revalidateTag } from 'next/cache';
+import { after } from 'next/server';
 import type { Cart, CartItem } from '@/lib/cart/types';
 import { sendEmail, getAdminEmails } from '@/lib/email/resend';
 import { customerOrderConfirmationEmail, adminNewOrderEmail } from '@/lib/email/templates';
 import { getStoreSettings, getProductsByIds, getVariantsByProductIds } from '@/lib/cache/store-data';
 import { unitsToMake } from '@/lib/orders/fulfillment';
+import { normalizeOrderNote, ORDER_NOTE_MAX_LENGTH } from '@/lib/orders/notes';
 import { parsePointsBalancesRpc } from '@/lib/points/buckets';
 
 interface PlaceOrderResult {
@@ -121,6 +123,15 @@ export async function placeOrder(formData: FormData): Promise<PlaceOrderResult> 
       return { success: false, error: 'Cart is empty' };
     }
 
+    const customerNote = normalizeOrderNote(formData.get('note'));
+
+    if (customerNote && customerNote.length > ORDER_NOTE_MAX_LENGTH) {
+      return {
+        success: false,
+        error: `Your note is too long. Please keep it under ${ORDER_NOTE_MAX_LENGTH} characters.`,
+      };
+    }
+
     // Normalize and validate cart items
     // Merge duplicates by (productId, variantId) and reject invalid quantities
     const normalizedItems = new Map<string, CartItem>();
@@ -161,6 +172,10 @@ export async function placeOrder(formData: FormData): Promise<PlaceOrderResult> 
       p_ship_state: null,
       p_ship_zip: null,
       p_ship_country: null,
+      // Only sent when there is a note. Until migration 036 is run, the database function
+      // has no such parameter and PostgREST rejects the whole call, so leaving it off keeps
+      // ordinary checkouts working in that gap.
+      ...(customerNote ? { p_customer_note: customerNote } : {}),
     });
 
     if (rpcError) {
@@ -172,6 +187,11 @@ export async function placeOrder(formData: FormData): Promise<PlaceOrderResult> 
         return { success: false, error: 'One or more items in your cart are no longer available' };
       } else if (rpcError.message.includes('does not belong to product')) {
         return { success: false, error: 'Invalid product variant selected' };
+      } else if (rpcError.message.includes('Order note is too long')) {
+        return {
+          success: false,
+          error: `Your note is too long. Please keep it under ${ORDER_NOTE_MAX_LENGTH} characters.`,
+        };
       } else {
         return { success: false, error: 'Failed to place order. Please try again.' };
       }
@@ -225,22 +245,36 @@ export async function placeOrder(formData: FormData): Promise<PlaceOrderResult> 
           itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
           createdAt: orderDetails.created_at,
           madeToOrderItems,
+          customerNote,
         };
-        if (customerTo) {
-          sendEmail({
-            to: customerTo,
-            ...customerOrderConfirmationEmail({ ...emailData, customerEmail: customerTo }),
-          }).catch(err => console.error('Failed to send customer email:', err));
-        }
-        
-        // Send admin notification (don't wait)
+
         const adminEmails = getAdminEmails();
-        if (adminEmails.length > 0) {
-          sendEmail({
-            to: adminEmails,
-            ...adminNewOrderEmail(emailData),
-          }).catch(err => console.error('Failed to send admin email:', err));
+        if (adminEmails.length === 0) {
+          // Without this the store looks fine while nobody hears about new orders
+          console.warn(
+            '[Email] No new-order alert sent: ADMIN_NOTIFICATION_EMAILS is not set'
+          );
         }
+
+        // after() keeps the function alive until the sends finish. A bare unawaited promise
+        // can be cut off when the serverless function is frozen after the response goes out,
+        // which drops the email without any error. sendEmail logs its own failures.
+        after(async () => {
+          await Promise.all([
+            customerTo
+              ? sendEmail({
+                  to: customerTo,
+                  ...customerOrderConfirmationEmail({ ...emailData, customerEmail: customerTo }),
+                })
+              : null,
+            adminEmails.length > 0
+              ? sendEmail({
+                  to: adminEmails,
+                  ...adminNewOrderEmail(emailData),
+                })
+              : null,
+          ]);
+        });
       }
     } catch (emailError) {
       // Log but don't fail the order

@@ -127,6 +127,11 @@ export function OrderActions({
           </>
         )}
       </div>
+      {confirmDelete && (
+        <p className="text-sm text-gray-700">
+          Points will not be refunded. You can bring the order back from Deleted orders.
+        </p>
+      )}
       {message && (
         <div
           className={`rounded-md p-3 text-sm ${

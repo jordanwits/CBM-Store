@@ -5,6 +5,7 @@ import { FormattedDate } from 'core/components/FormattedDate';
 import { orderStatusLabel, orderStatusPillClasses } from '@/lib/orders/status';
 import {
   orderItemProcurement,
+  orderItemReadyStockNote,
   orderItemVariantLabel,
   summarizeFulfillment,
   unitsToMake,
@@ -14,6 +15,7 @@ import { OrderStatusEditor } from './OrderStatusEditor';
 import { OrderActions } from './OrderActions';
 import { PickupNoticeSender } from './PickupNoticeSender';
 import { ItemFulfillmentSelect } from './ItemFulfillmentSelect';
+import { StaffNotesEditor } from './StaffNotesEditor';
 import { getTrackingUrl } from '@/lib/tracking';
 import Link from 'next/link';
 
@@ -43,7 +45,9 @@ export default async function AdminOrderDetailPage({
       .single(),
     supabase
       .from('order_items')
-      .select('*')
+      // The variant's live count says whether marking a made-to-order line ready will take
+      // anything from inventory (an untracked variant has nothing to take)
+      .select('*, product_variants(inventory_count)')
       .eq('order_id', id),
     supabase
       .from('points_ledger')
@@ -78,7 +82,6 @@ export default async function AdminOrderDetailPage({
             orderId={order.id}
             currentStatus={order.status}
             currentTrackingNumber={order.tracking_number}
-            currentNotes={order.notes}
             isDevMode={isDevMode}
           />
           <OrderActions
@@ -178,6 +181,32 @@ export default async function AdminOrderDetailPage({
 
       <Card className="mb-6">
         <CardHeader>
+          <h2 className="text-lg font-semibold text-gray-900">Notes</h2>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-5">
+            {order.customer_note && (
+              <div>
+                <p className="text-sm text-gray-700 font-medium mb-1">From the customer</p>
+                <p className="rounded-md border border-blue-200 bg-blue-50 p-3 text-gray-900 whitespace-pre-wrap break-words">
+                  {order.customer_note}
+                </p>
+              </div>
+            )}
+            <div>
+              <p className="text-sm text-gray-700 font-medium mb-1">Staff notes</p>
+              <StaffNotesEditor
+                orderId={order.id}
+                currentNotes={order.notes ?? null}
+                isDevMode={isDevMode}
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="mb-6">
+        <CardHeader>
           <h2 className="text-lg font-semibold text-gray-900">Pickup Information</h2>
         </CardHeader>
         <CardContent>
@@ -221,6 +250,10 @@ export default async function AdminOrderDetailPage({
                 <tbody className="divide-y divide-gray-200">
                   {items.map((item) => {
                     const procurement = orderItemProcurement(item);
+                    const readyStockNote = orderItemReadyStockNote(
+                      item,
+                      (item as any).product_variants?.inventory_count
+                    );
 
                     return (
                       <tr key={item.id}>
@@ -254,6 +287,9 @@ export default async function AdminOrderDetailPage({
                             currentStatus={item.fulfillment_status ?? 'pending'}
                             disabled={isDevMode || order.status === 'cancelled'}
                           />
+                          {readyStockNote && (
+                            <span className="block text-xs text-gray-700 mt-1">{readyStockNote}</span>
+                          )}
                         </td>
                       </tr>
                     );
@@ -285,17 +321,6 @@ export default async function AdminOrderDetailPage({
               }))}
               isDevMode={isDevMode}
             />
-          </CardContent>
-        </Card>
-      )}
-
-      {order.notes && (
-        <Card>
-          <CardHeader>
-            <h2 className="text-lg font-semibold text-gray-900">Internal Notes</h2>
-          </CardHeader>
-          <CardContent>
-            <p className="text-gray-800">{order.notes}</p>
           </CardContent>
         </Card>
       )}

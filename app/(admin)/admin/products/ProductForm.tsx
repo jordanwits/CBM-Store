@@ -232,7 +232,9 @@ export function ProductForm({ mode, productId, initialData, isDevMode }: Product
                 <span className="block text-xs text-gray-600 mt-0.5">
                   Customers can order it no matter what inventory says. Any stock you have recorded
                   on a variant is sold first, and whatever the order needs beyond that is flagged so
-                  your team knows to procure it. Put the lead time in the description.
+                  your team knows to procure it. When the made items arrive, add them to inventory:
+                  they come back out when the order item is marked ready for pickup. Put the lead
+                  time in the description.
                 </span>
               </span>
             </label>

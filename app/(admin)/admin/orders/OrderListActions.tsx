@@ -131,7 +131,9 @@ export function OrderListActions({ orderId, isDevMode }: OrderListActionsProps) 
         >
           {confirmDelete ? (
             <div className="px-3 py-3 space-y-3">
-              <p className="text-sm text-gray-900">Delete this order? Points will not be refunded.</p>
+              <p className="text-sm text-gray-900">
+                Delete this order? Points will not be refunded. You can bring it back from Deleted orders.
+              </p>
               <div className="flex gap-2">
                 <button
                   type="button"

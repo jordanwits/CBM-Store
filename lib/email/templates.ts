@@ -16,6 +16,8 @@ interface OrderData {
    * wait has to be said out loud.
    */
   madeToOrderItems?: string[];
+  /** What the customer typed at checkout, e.g. who the order is really for. */
+  customerNote?: string | null;
 }
 
 interface OrderStatusData extends OrderData {
@@ -116,7 +118,17 @@ export function adminNewOrderEmail(order: OrderData) {
   const orderUrl = `${siteUrl}/admin/orders/${order.orderId}`;
   
   const subject = `New Order - #${order.orderNumber}`;
-  
+
+  // Customer-typed text, so it is escaped; line breaks are kept because people use them
+  const customerNoteSection = order.customerNote
+    ? `
+  <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+    <h2 style="font-size: 18px; margin: 0 0 10px 0; color: #1e3a8a;">Note from the customer</h2>
+    <p style="margin: 0; color: #1e3a8a; white-space: pre-wrap;">${escapeHtml(order.customerNote)}</p>
+  </div>
+  `
+    : '';
+
   const html = `
 <!DOCTYPE html>
 <html>
@@ -160,7 +172,8 @@ export function adminNewOrderEmail(order: OrderData) {
       </tr>
     </table>
   </div>
-  
+
+  ${customerNoteSection}
   <div style="text-align: center; margin: 30px 0;">
     <a href="${orderUrl}" style="display: inline-block; background-color: #2563eb; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold;">View Order in Admin Panel</a>
   </div>

@@ -97,11 +97,26 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
   const from = totalCount === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1;
   const to = Math.min(currentPage * ITEMS_PER_PAGE, totalCount);
 
+  // One line of whichever note the order has, so orders placed on someone else's behalf can
+  // be told apart without opening each one. The customer's own words win when both exist.
+  const listNote = (order: any): string | null =>
+    order.customer_note?.trim() || order.notes?.trim() || null;
+
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Orders</h1>
-        <p className="text-gray-600 mt-1">Manage and fulfill customer orders</p>
+      <div className="mb-8 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Orders</h1>
+          <p className="text-gray-600 mt-1">Manage and fulfill customer orders</p>
+        </div>
+        {!isDevMode && (
+          <Link
+            href="/admin/orders/deleted"
+            className="text-sm font-medium text-gray-700 hover:text-gray-900 hover:underline"
+          >
+            Deleted orders
+          </Link>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
@@ -193,6 +208,11 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
                       <p className="text-sm text-gray-900 truncate">
                         {order.profiles?.email?.trim() || order.profiles?.phone?.trim() || 'N/A'}
                       </p>
+                      {listNote(order) && (
+                        <p className="text-xs text-gray-700 mt-1 truncate" title={listNote(order) ?? undefined}>
+                          Note: {listNote(order)}
+                        </p>
+                      )}
                       <p className="text-xs text-gray-500 mt-2">Store pickup</p>
                       <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-100">
                         <span className="text-sm font-semibold text-gray-900">{order.total_points} pts</span>
@@ -242,6 +262,14 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-900">
                         {order.profiles?.email?.trim() || order.profiles?.phone?.trim() || 'N/A'}
+                        {listNote(order) && (
+                          <span
+                            className="block max-w-xs truncate text-xs text-gray-700 mt-0.5"
+                            title={listNote(order) ?? undefined}
+                          >
+                            Note: {listNote(order)}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-sm font-semibold text-gray-900">{order.total_points}</td>
                       <td className="px-4 py-3 text-sm">

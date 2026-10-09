@@ -11,7 +11,6 @@ interface OrderStatusEditorProps {
   orderId: string;
   currentStatus: string;
   currentTrackingNumber?: string;
-  currentNotes?: string;
   isDevMode: boolean;
 }
 
@@ -20,9 +19,8 @@ const STATUS_OPTIONS = ORDER_STATUS_OPTIONS;
 export function OrderStatusEditor({ 
   orderId, 
   currentStatus, 
-  currentTrackingNumber, 
-  currentNotes, 
-  isDevMode 
+  currentTrackingNumber,
+  isDevMode
 }: OrderStatusEditorProps) {
   const router = useRouter();
   const [isEditing, setIsEditing] = useState(false);
@@ -31,10 +29,9 @@ export function OrderStatusEditor({
   
   const [status, setStatus] = useState(currentStatus);
   const [trackingNumber, setTrackingNumber] = useState(currentTrackingNumber || '');
-  const [notes, setNotes] = useState(currentNotes || '');
   // Null until staff touch the box: the default follows the dropdown, so picking a new
-  // status arms the email and fixing a note leaves it disarmed, without overriding a
-  // deliberate choice made before the status was changed.
+  // status arms the email and fixing a tracking number leaves it disarmed, without
+  // overriding a deliberate choice made before the status was changed.
   const [notifyOverride, setNotifyOverride] = useState<boolean | null>(null);
 
   const statusChanged = status !== currentStatus;
@@ -49,7 +46,6 @@ export function OrderStatusEditor({
       orderId,
       status,
       trackingNumber: trackingNumber || undefined,
-      notes: notes || undefined,
       notifyCustomer,
     });
 
@@ -75,7 +71,6 @@ export function OrderStatusEditor({
   const handleCancel = () => {
     setStatus(currentStatus);
     setTrackingNumber(currentTrackingNumber || '');
-    setNotes(currentNotes || '');
     setNotifyOverride(null);
     setIsEditing(false);
     setMessage(null);
@@ -124,20 +119,6 @@ export function OrderStatusEditor({
           disabled={loading}
           placeholder="e.g., 1Z999AA10123456784"
         />
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Internal Notes (Optional)
-          </label>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            disabled={loading}
-            placeholder="Add any internal notes about this order..."
-            rows={3}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-          />
-        </div>
 
         <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
           <label className="flex items-start gap-3 cursor-pointer">

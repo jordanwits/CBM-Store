@@ -165,3 +165,39 @@ export function orderItemProcurement(
 
   return { label: 'Made to Order', pillClasses: 'bg-amber-100 text-amber-900' };
 }
+
+export interface OrderItemReadyStockInput extends OrderItemFulfillmentInput {
+  fulfillment_status?: string | null;
+  units_from_stock_at_ready?: number | null;
+}
+
+/**
+ * What marking a made-to-order line ready does, or did, to inventory, for the admin order
+ * table. The made units leave stock when the line leaves "not ready", so staff need to know
+ * beforehand that the arrivals should already be counted in.
+ *
+ * variantInventory is the variant's current count: null means the variant is untracked (or
+ * gone), in which case marking ready takes nothing and there is nothing to warn about.
+ */
+export function orderItemReadyStockNote(
+  item: OrderItemReadyStockInput,
+  variantInventory: number | null | undefined
+): string | null {
+  const taken = item.units_from_stock_at_ready ?? 0;
+
+  if (taken > 0) {
+    return `${taken} taken from inventory when marked ready`;
+  }
+
+  const toMake = unitsToMake(item);
+
+  if (
+    toMake > 0 &&
+    (item.fulfillment_status ?? 'pending') === 'pending' &&
+    typeof variantInventory === 'number'
+  ) {
+    return `Marking ready takes ${toMake} from inventory`;
+  }
+
+  return null;
+}
