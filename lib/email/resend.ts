@@ -1,3 +1,5 @@
+import { isReservedPhoneLoginEmail } from '@/lib/auth/phone';
+
 interface SendEmailParams {
   to: string | string[];
   subject: string;
@@ -11,7 +13,39 @@ interface SendEmailResult {
   skipped?: boolean;
 }
 
+/**
+ * The address to email, or null when there is nowhere real to send.
+ *
+ * Accounts made with "Phone + temp password" carry a placeholder address on the reserved
+ * phone-login.invalid domain (lib/auth/phone.ts) so Supabase's email auth works underneath.
+ * It is never a mailbox: anything sent there fails or bounces. Callers that tell staff an
+ * email went out check this first, so a phone-only customer reads as "no email on file".
+ */
+export function deliverableEmail(email: string | null | undefined): string | null {
+  const trimmed = email?.trim();
+  if (!trimmed || isReservedPhoneLoginEmail(trimmed)) {
+    return null;
+  }
+  return trimmed;
+}
+
 export async function sendEmail(params: SendEmailParams): Promise<SendEmailResult> {
+  // Backstop for any caller that did not check: never hand Resend a placeholder address.
+  // A list (the admin inboxes) keeps its real addresses; with none left, nothing is sent.
+  const requested = Array.isArray(params.to) ? params.to : [params.to];
+  const recipients = requested
+    .map(deliverableEmail)
+    .filter((email): email is string => email !== null);
+
+  if (recipients.length === 0) {
+    console.log('[Email] Skipped sending:', {
+      to: params.to,
+      subject: params.subject,
+      reason: 'no deliverable recipient (blank or phone-login placeholder)',
+    });
+    return { success: true, skipped: true };
+  }
+
   // Check for required env vars
   const apiKey = process.env.RESEND_API_KEY;
   const fromEmail = process.env.FROM_EMAIL;
@@ -43,7 +77,7 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
       },
       body: JSON.stringify({
         from: fromEmail,
-        to: Array.isArray(params.to) ? params.to : [params.to],
+        to: recipients,
         subject: params.subject,
         html: params.html,
         text: params.text || stripHtml(params.html),

@@ -3,7 +3,7 @@
 import { requireAdmin } from '@/lib/auth/require-admin';
 import { revalidatePath, revalidateTag } from 'next/cache';
 import { after } from 'next/server';
-import { sendEmail, getAdminEmails } from '@/lib/email/resend';
+import { sendEmail, getAdminEmails, deliverableEmail } from '@/lib/email/resend';
 import {
   customerOrderStatusEmail,
   adminOrderStatusEmail,
@@ -33,7 +33,20 @@ interface UpdateOrderStatusData {
   notifyCustomer?: boolean;
 }
 
-export async function updateOrderStatus(data: UpdateOrderStatusData) {
+interface UpdateOrderStatusResult {
+  success: boolean;
+  error?: string;
+  /**
+   * Whether a status email to the customer was sent off. False when it was not asked for,
+   * and also when the customer has no real address (a phone-only account), so the editor
+   * never tells staff someone was emailed when nobody was.
+   */
+  customerEmailed?: boolean;
+}
+
+export async function updateOrderStatus(
+  data: UpdateOrderStatusData
+): Promise<UpdateOrderStatusResult> {
   // Check if using placeholder Supabase (dev mode)
   const isDevMode = !process.env.NEXT_PUBLIC_SUPABASE_URL || 
                     process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder');
@@ -98,13 +111,15 @@ export async function updateOrderStatus(data: UpdateOrderStatusData) {
     revalidateTag('product-variants');
   }
 
+  // The customer hears about this only when asked to; the caller's default is "the status
+  // moved". A phone-only customer has no real address, so there is no one to email.
+  const notifyCustomer = data.notifyCustomer ?? statusChanged;
+  const customerEmail = deliverableEmail((existingOrder as any)?.profiles?.email);
+  const customerEmailed = Boolean(customerEmail && notifyCustomer);
+
   // Send email notifications (failures should not block status update)
   try {
-    // The customer hears about this only when asked to; the caller's default is
-    // "the status moved". Admins get the record whenever it actually moved.
-    const notifyCustomer = data.notifyCustomer ?? statusChanged;
-
-    const customerEmail = (existingOrder as any)?.profiles?.email?.trim();
+    // Admins get the record whenever the status actually moved.
     const customerPhone = (existingOrder as any)?.profiles?.phone?.trim();
     {
       const orderNumber = data.orderId.slice(0, 8).toUpperCase();
@@ -125,7 +140,7 @@ export async function updateOrderStatus(data: UpdateOrderStatusData) {
       // can be cut off once the response has gone out. sendEmail logs its own failures.
       after(async () => {
         await Promise.all([
-          customerEmail && notifyCustomer
+          customerEmailed && customerEmail
             ? sendEmail({
                 to: customerEmail,
                 ...customerOrderStatusEmail(emailData),
@@ -145,7 +160,7 @@ export async function updateOrderStatus(data: UpdateOrderStatusData) {
     console.error('Error sending status update emails:', emailError);
   }
 
-  return { success: true };
+  return { success: true, customerEmailed };
 }
 
 interface SendPickupNoticeData {
@@ -231,7 +246,8 @@ export async function sendPickupNotice(
     return { success: false, error: 'Select at least one item that is ready for pickup.' };
   }
 
-  const customerEmail = (order as any)?.profiles?.email?.trim();
+  // A phone-only account's address is a placeholder, so it counts as no email at all
+  const customerEmail = deliverableEmail((order as any)?.profiles?.email);
 
   if (!customerEmail) {
     return {

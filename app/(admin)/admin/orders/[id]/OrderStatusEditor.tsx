@@ -54,9 +54,13 @@ export function OrderStatusEditor({
     if (result.success) {
       setMessage({
         type: 'success',
-        text: notifyCustomer
+        // The server says whether an email actually went: a phone-only customer has no
+        // real address, so asking for one is not the same as sending one
+        text: result.customerEmailed
           ? 'Order updated and the customer has been emailed.'
-          : 'Order updated. No email was sent to the customer.',
+          : notifyCustomer
+            ? 'Order updated. This customer has no email address on file, so they were not emailed.'
+            : 'Order updated. No email was sent to the customer.',
       });
       setIsEditing(false);
       setNotifyOverride(null);

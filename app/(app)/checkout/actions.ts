@@ -5,7 +5,7 @@ import { getJwtSubject } from '@/lib/auth/jwt';
 import { revalidatePath, revalidateTag } from 'next/cache';
 import { after } from 'next/server';
 import type { Cart, CartItem } from '@/lib/cart/types';
-import { sendEmail, getAdminEmails } from '@/lib/email/resend';
+import { sendEmail, getAdminEmails, deliverableEmail } from '@/lib/email/resend';
 import { customerOrderConfirmationEmail, adminNewOrderEmail } from '@/lib/email/templates';
 import { getStoreSettings, getProductsByIds, getVariantsByProductIds } from '@/lib/cache/store-data';
 import { unitsToMake } from '@/lib/orders/fulfillment';
@@ -224,7 +224,8 @@ export async function placeOrder(formData: FormData): Promise<PlaceOrderResult> 
       
       if (orderDetails) {
         const orderNumber = orderId.slice(0, 8).toUpperCase();
-        const customerTo = user.email?.trim();
+        // Null for a phone-only account, whose auth email is a placeholder nobody reads
+        const customerTo = deliverableEmail(user.email);
 
         // Read the lines back rather than the cart: the RPC decides how much of each line
         // came off the shelf, so only it knows what is actually being ordered in.
@@ -240,7 +241,12 @@ export async function placeOrder(formData: FormData): Promise<PlaceOrderResult> 
         const emailData = {
           orderId: orderId,
           orderNumber,
-          customerEmail: customerTo || user.phone || '(no email on file)',
+          // Phone-only accounts keep their number in metadata, not in user.phone
+          customerEmail:
+            customerTo ||
+            user.phone ||
+            user.user_metadata?.phone_e164 ||
+            '(no email on file)',
           totalPoints: orderDetails.total_points,
           itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
           createdAt: orderDetails.created_at,
