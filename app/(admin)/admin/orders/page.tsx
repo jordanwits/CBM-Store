@@ -97,8 +97,8 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
   const from = totalCount === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1;
   const to = Math.min(currentPage * ITEMS_PER_PAGE, totalCount);
 
-  // One line of whichever note the order has, so orders placed on someone else's behalf can
-  // be told apart without opening each one. The customer's own words win when both exist.
+  // Whichever note the order has, in full, so orders placed on someone else's behalf can be
+  // told apart without opening each one. The customer's own words win when both exist.
   const listNote = (order: any): string | null =>
     order.customer_note?.trim() || order.notes?.trim() || null;
 
@@ -209,7 +209,7 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
                         {order.profiles?.email?.trim() || order.profiles?.phone?.trim() || 'N/A'}
                       </p>
                       {listNote(order) && (
-                        <p className="text-xs text-gray-700 mt-1 truncate" title={listNote(order) ?? undefined}>
+                        <p className="text-xs text-gray-700 mt-1 whitespace-pre-wrap break-words">
                           Note: {listNote(order)}
                         </p>
                       )}
@@ -263,10 +263,7 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
                       <td className="px-4 py-3 text-sm text-gray-900">
                         {order.profiles?.email?.trim() || order.profiles?.phone?.trim() || 'N/A'}
                         {listNote(order) && (
-                          <span
-                            className="block max-w-xs truncate text-xs text-gray-700 mt-0.5"
-                            title={listNote(order) ?? undefined}
-                          >
+                          <span className="block max-w-md whitespace-pre-wrap break-words text-xs text-gray-700 mt-0.5">
                             Note: {listNote(order)}
                           </span>
                         )}

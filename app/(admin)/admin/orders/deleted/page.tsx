@@ -138,7 +138,7 @@ export default async function DeletedOrdersPage() {
                       </div>
                       <p className="text-sm text-gray-900 truncate">{row.customer}</p>
                       {row.note && (
-                        <p className="text-xs text-gray-700 truncate" title={row.note}>
+                        <p className="text-xs text-gray-700 whitespace-pre-wrap break-words">
                           Note: {row.note}
                         </p>
                       )}
@@ -195,7 +195,7 @@ export default async function DeletedOrdersPage() {
                         <td className="px-4 py-3 text-sm text-gray-900 align-top">
                           {row.customer}
                           {row.note && (
-                            <span className="block max-w-xs truncate text-xs text-gray-700 mt-0.5" title={row.note}>
+                            <span className="block max-w-md whitespace-pre-wrap break-words text-xs text-gray-700 mt-0.5">
                               Note: {row.note}
                             </span>
                           )}
