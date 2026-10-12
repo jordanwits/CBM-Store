@@ -140,7 +140,8 @@ export default async function AdminOrderDetailPage({
                   <p className="text-sm text-gray-700 font-medium">Items</p>
                   <p className="mt-1 text-gray-900">
                     {fulfillment.pickedUp} picked up · {fulfillment.ready} ready ·{' '}
-                    {fulfillment.pending} not ready
+                    {fulfillment.ordered > 0 && <>{fulfillment.ordered} ordered · </>}
+                    {fulfillment.pending - fulfillment.ordered} not ready
                   </p>
                   {fulfillment.isPartiallyFulfilled && (
                     <span className="inline-block mt-1 px-3 py-1 rounded-full text-sm font-medium bg-amber-100 text-amber-900">
@@ -285,6 +286,7 @@ export default async function AdminOrderDetailPage({
                             orderId={order.id}
                             itemId={item.id}
                             currentStatus={item.fulfillment_status ?? 'pending'}
+                            canBeOrdered={unitsToMake(item) > 0}
                             disabled={isDevMode || order.status === 'cancelled'}
                           />
                           {readyStockNote && (

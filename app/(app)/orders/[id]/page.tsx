@@ -14,6 +14,7 @@ import { getTrackingUrl } from '@/lib/tracking';
 import { cbmBranding } from '@/branding';
 import { orderStatusLabel, orderStatusBadgeVariant } from '@/lib/orders/status';
 import {
+  isItemAwaitingReady,
   itemFulfillmentLabel,
   itemFulfillmentPillClasses,
   summarizeFulfillment,
@@ -354,11 +355,15 @@ export default async function OrderDetailPage({
                         {item.product_name}
                       </h3>
                     </Link>
+                    {/* "Ordered" is the store's own bookkeeping, so the customer sees it the
+                        same as not ready: still being prepared */}
                     {showFulfillmentDetail && (
                       <span
-                        className={`inline-block mb-2 px-2 py-1 rounded-full text-xs font-medium ${itemFulfillmentPillClasses(item.fulfillment_status ?? 'pending')}`}
+                        className={`inline-block mb-2 px-2 py-1 rounded-full text-xs font-medium ${itemFulfillmentPillClasses(
+                          isItemAwaitingReady(item.fulfillment_status) ? 'pending' : item.fulfillment_status
+                        )}`}
                       >
-                        {item.fulfillment_status === 'pending' || !item.fulfillment_status
+                        {isItemAwaitingReady(item.fulfillment_status)
                           ? 'Still being prepared'
                           : itemFulfillmentLabel(item.fulfillment_status)}
                       </span>

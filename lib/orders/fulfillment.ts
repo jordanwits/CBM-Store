@@ -65,16 +65,28 @@ export function unitsToMake(item: OrderItemFulfillmentInput): number {
  *
  * Added in 039. orders.status still describes the order as a whole; these describe the
  * lines under it, which is the only place "three of the four are collectable" can live.
+ *
+ * 'ordered' is a made-to-order line that has been ordered in but has not arrived. It is
+ * still not ready: nothing is set aside for the customer and nothing leaves inventory.
  */
-export const ITEM_FULFILLMENT_STATUSES = ['pending', 'ready', 'picked_up'] as const;
+export const ITEM_FULFILLMENT_STATUSES = ['pending', 'ordered', 'ready', 'picked_up'] as const;
 
 export type ItemFulfillmentStatus = (typeof ITEM_FULFILLMENT_STATUSES)[number];
 
 export const ITEM_FULFILLMENT_LABELS: Record<ItemFulfillmentStatus, string> = {
   pending: 'Not ready',
+  ordered: 'Ordered',
   ready: 'Ready for pickup',
   picked_up: 'Picked up',
 };
+
+/**
+ * The line cannot be collected yet: not ready, or ordered and on its way. Anything that
+ * asks "is this outstanding?" goes through here, so 'ordered' is never mistaken for ready.
+ */
+export function isItemAwaitingReady(status: string | null | undefined): boolean {
+  return !status || status === 'pending' || status === 'ordered';
+}
 
 /** Falls back to the raw value so an unexpected state still reads as something. */
 export function itemFulfillmentLabel(status: string): string {
@@ -87,6 +99,8 @@ export function itemFulfillmentPillClasses(status: string): string {
       return 'bg-green-100 text-green-900';
     case 'ready':
       return 'bg-purple-100 text-purple-900';
+    case 'ordered':
+      return 'bg-blue-100 text-blue-900';
     default:
       return 'bg-gray-100 text-gray-800';
   }
@@ -94,7 +108,10 @@ export function itemFulfillmentPillClasses(status: string): string {
 
 export interface OrderFulfillmentSummary {
   total: number;
+  /** Lines not collectable yet, ordered ones included. */
   pending: number;
+  /** Of the pending lines, those ordered in and on their way. */
+  ordered: number;
   ready: number;
   pickedUp: number;
   /** Lines the customer cannot collect yet. */
@@ -113,6 +130,7 @@ export function summarizeFulfillment(
   items: Array<{ fulfillment_status?: string | null }>
 ): OrderFulfillmentSummary {
   let pending = 0;
+  let ordered = 0;
   let ready = 0;
   let pickedUp = 0;
 
@@ -124,6 +142,10 @@ export function summarizeFulfillment(
       case 'ready':
         ready += 1;
         break;
+      case 'ordered':
+        ordered += 1;
+        pending += 1;
+        break;
       default:
         pending += 1;
     }
@@ -134,6 +156,7 @@ export function summarizeFulfillment(
   return {
     total,
     pending,
+    ordered,
     ready,
     pickedUp,
     outstanding: pending,
@@ -193,7 +216,7 @@ export function orderItemReadyStockNote(
 
   if (
     toMake > 0 &&
-    (item.fulfillment_status ?? 'pending') === 'pending' &&
+    isItemAwaitingReady(item.fulfillment_status) &&
     typeof variantInventory === 'number'
   ) {
     return `Marking ready takes ${toMake} from inventory`;

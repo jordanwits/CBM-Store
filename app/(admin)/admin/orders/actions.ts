@@ -14,6 +14,7 @@ import {
 import {
   orderItemVariantLabel,
   ITEM_FULFILLMENT_STATUSES,
+  isItemAwaitingReady,
   type ItemFulfillmentStatus,
 } from '@/lib/orders/fulfillment';
 import { normalizeOrderNote, ORDER_NOTE_MAX_LENGTH } from '@/lib/orders/notes';
@@ -288,10 +289,11 @@ export async function sendPickupNotice(
     });
   }
 
-  // Record what the customer was just told, so it outlives whoever sent it. Only pending
-  // lines move: a line already picked up is not un-collected by mentioning it again.
+  // Record what the customer was just told, so it outlives whoever sent it. Only lines not
+  // yet ready move (not ready, or ordered and now arrived): a line already picked up is not
+  // un-collected by mentioning it again.
   const linesToMarkReady = allItems.filter(
-    (item) => readyIds.has(item.id) && item.fulfillment_status === 'pending'
+    (item) => readyIds.has(item.id) && isItemAwaitingReady(item.fulfillment_status)
   );
   const idsToMarkReady = linesToMarkReady.map((item) => item.id);
 

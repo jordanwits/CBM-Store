@@ -13,6 +13,12 @@ interface ItemFulfillmentSelectProps {
   orderId: string;
   itemId: string;
   currentStatus: string;
+  /**
+   * The line has units to make, so "Ordered" means something for it. A line that came
+   * entirely off the shelf never gets ordered in, and offering it there only invites a
+   * wrong click.
+   */
+  canBeOrdered?: boolean;
   disabled?: boolean;
 }
 
@@ -20,6 +26,7 @@ export function ItemFulfillmentSelect({
   orderId,
   itemId,
   currentStatus,
+  canBeOrdered = false,
   disabled,
 }: ItemFulfillmentSelectProps) {
   const router = useRouter();
@@ -54,7 +61,10 @@ export function ItemFulfillmentSelect({
         aria-label="Item fulfillment status"
         className="w-full min-w-[9rem] px-2 py-1 border border-gray-300 rounded-md text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
       >
-        {ITEM_FULFILLMENT_STATUSES.map((value: ItemFulfillmentStatus) => (
+        {ITEM_FULFILLMENT_STATUSES.filter(
+          // A line already marked ordered keeps the option, so its value always has a label
+          (value) => value !== 'ordered' || canBeOrdered || status === 'ordered'
+        ).map((value: ItemFulfillmentStatus) => (
           <option key={value} value={value}>
             {ITEM_FULFILLMENT_LABELS[value]}
           </option>

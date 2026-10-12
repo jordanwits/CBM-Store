@@ -162,7 +162,9 @@ export function PickupNoticeSender({ orderId, lines, isDevMode }: PickupNoticeSe
                   )}
                   {line.fulfillmentStatus !== 'picked_up' && line.unitsToMake > 0 && (
                     <span className="block text-xs text-amber-700 mt-0.5">
-                      {line.unitsToMake} still to be made
+                      {line.fulfillmentStatus === 'ordered'
+                        ? `${line.unitsToMake} ordered, not here yet`
+                        : `${line.unitsToMake} still to be made`}
                     </span>
                   )}
                 </span>
