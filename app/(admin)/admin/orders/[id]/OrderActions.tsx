@@ -9,12 +9,15 @@ interface OrderActionsProps {
   orderId: string;
   isDevMode: boolean;
   isAlreadyRefunded?: boolean;
+  /** Some lines were refunded on their own, so a refund now covers only the rest. */
+  isPartiallyRefunded?: boolean;
 }
 
 export function OrderActions({
   orderId,
   isDevMode,
   isAlreadyRefunded = false,
+  isPartiallyRefunded = false,
 }: OrderActionsProps) {
   const router = useRouter();
   const [loading, setLoading] = useState<'delete' | 'refund' | 'refund-return' | null>(null);
@@ -91,7 +94,7 @@ export function OrderActions({
                 onClick={() => setConfirmRefund('refund')}
                 disabled={loading !== null}
               >
-                Refund
+                {isPartiallyRefunded ? 'Refund the rest' : 'Refund'}
               </Button>
             ) : (
               <div className="flex flex-wrap gap-2 items-center">
@@ -130,6 +133,13 @@ export function OrderActions({
       {confirmDelete && (
         <p className="text-sm text-gray-700">
           Points will not be refunded. You can bring the order back from Deleted orders.
+        </p>
+      )}
+      {confirmRefund !== null && (
+        <p className="text-sm text-gray-700">
+          {isPartiallyRefunded
+            ? 'Refunds every item not refunded yet and cancels the order.'
+            : 'Refunds every item and cancels the order. To refund one item, use Refund item on its line.'}
         </p>
       )}
       {message && (

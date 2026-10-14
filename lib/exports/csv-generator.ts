@@ -91,6 +91,10 @@ export function generateOrderItemsCsv(orderItems: any[]): string {
     'fulfillment_status',
     'points_per_item',
     'total_points',
+    'refunded_at',
+    'refunded_restricted_points',
+    'refunded_universal_points',
+    'refunded_with_return',
     'created_at',
   ];
 

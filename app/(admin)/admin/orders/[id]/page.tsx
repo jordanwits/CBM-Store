@@ -4,17 +4,21 @@ import { BackButton } from 'core/components/BackButton';
 import { FormattedDate } from 'core/components/FormattedDate';
 import { orderStatusLabel, orderStatusPillClasses } from '@/lib/orders/status';
 import {
+  isItemRefunded,
+  itemFulfillmentPillClasses,
   orderItemProcurement,
   orderItemReadyStockNote,
   orderItemVariantLabel,
   summarizeFulfillment,
   unitsToMake,
 } from '@/lib/orders/fulfillment';
+import { orderItemRefundedPoints, summarizeOrderRefunds } from '@/lib/orders/refunds';
 import { notFound } from 'next/navigation';
 import { OrderStatusEditor } from './OrderStatusEditor';
 import { OrderActions } from './OrderActions';
 import { PickupNoticeSender } from './PickupNoticeSender';
 import { ItemFulfillmentSelect } from './ItemFulfillmentSelect';
+import { ItemRefundButton } from './ItemRefundButton';
 import { StaffNotesEditor } from './StaffNotesEditor';
 import { getTrackingUrl } from '@/lib/tracking';
 import Link from 'next/link';
@@ -37,7 +41,7 @@ export default async function AdminOrderDetailPage({
   const supabase = await createClient();
 
   // Run queries in parallel for faster loading
-  const [orderResult, itemsResult, refundCheck] = await Promise.all([
+  const [orderResult, itemsResult, ledgerRefunds] = await Promise.all([
     supabase
       .from('orders')
       .select('*, profiles(email, phone, full_name)')
@@ -49,9 +53,10 @@ export default async function AdminOrderDetailPage({
       // anything from inventory (an untracked variant has nothing to take)
       .select('*, product_variants(inventory_count)')
       .eq('order_id', id),
+    // Every refund for the order, line or whole, is a positive ledger row against it
     supabase
       .from('points_ledger')
-      .select('id')
+      .select('delta_points, point_type')
       .eq('order_id', id)
       .gt('delta_points', 0),
   ]);
@@ -62,8 +67,10 @@ export default async function AdminOrderDetailPage({
 
   const order = orderResult.data;
   const items = itemsResult.data || [];
-  const isAlreadyRefunded = (refundCheck.data?.length ?? 0) > 0;
+  const refunds = summarizeOrderRefunds(order, ledgerRefunds.data ?? []);
   const fulfillment = summarizeFulfillment(items);
+  // Refunded lines are no longer part of what the customer is told about
+  const activeItems = items.filter((item) => !isItemRefunded(item.fulfillment_status));
 
   return (
     <div className="px-4 py-6 sm:px-0">
@@ -87,7 +94,8 @@ export default async function AdminOrderDetailPage({
           <OrderActions
             orderId={order.id}
             isDevMode={isDevMode}
-            isAlreadyRefunded={isAlreadyRefunded}
+            isAlreadyRefunded={refunds.isFullyRefunded}
+            isPartiallyRefunded={refunds.isPartiallyRefunded}
           />
         </div>
       </div>
@@ -142,6 +150,7 @@ export default async function AdminOrderDetailPage({
                     {fulfillment.pickedUp} picked up · {fulfillment.ready} ready ·{' '}
                     {fulfillment.ordered > 0 && <>{fulfillment.ordered} ordered · </>}
                     {fulfillment.pending - fulfillment.ordered} not ready
+                    {fulfillment.refunded > 0 && <> · {fulfillment.refunded} refunded</>}
                   </p>
                   {fulfillment.isPartiallyFulfilled && (
                     <span className="inline-block mt-1 px-3 py-1 rounded-full text-sm font-medium bg-amber-100 text-amber-900">
@@ -174,6 +183,14 @@ export default async function AdminOrderDetailPage({
                   Universal{' '}
                   {(order as { universal_points_used?: number }).universal_points_used ?? 0}
                 </p>
+                {refunds.refunded > 0 && (
+                  <p className="text-sm font-medium text-rose-800 mt-2">
+                    {refunds.refunded} refunded
+                    <span className="block text-xs font-normal text-gray-600 mt-0.5">
+                      CBM points {refunds.refundedRestricted} · Universal {refunds.refundedUniversal}
+                    </span>
+                  </p>
+                )}
               </div>
             </div>
           </CardContent>
@@ -251,13 +268,16 @@ export default async function AdminOrderDetailPage({
                 <tbody className="divide-y divide-gray-200">
                   {items.map((item) => {
                     const procurement = orderItemProcurement(item);
-                    const readyStockNote = orderItemReadyStockNote(
-                      item,
-                      (item as any).product_variants?.inventory_count
-                    );
+                    const variantInventory = (item as any).product_variants?.inventory_count;
+                    const readyStockNote = orderItemReadyStockNote(item, variantInventory);
+                    const refunded = isItemRefunded(item.fulfillment_status);
+                    // What a refund with return would put back: checkout's draw plus the
+                    // made units taken at ready, and only into a variant that counts stock
+                    const unitsOffShelf =
+                      (item.units_from_stock ?? 0) + (item.units_from_stock_at_ready ?? 0);
 
                     return (
-                      <tr key={item.id}>
+                      <tr key={item.id} className={refunded ? 'bg-gray-50' : undefined}>
                         <td className="px-4 py-3 text-sm font-medium text-gray-900">
                           {item.product_name}
                           {procurement && (
@@ -278,19 +298,54 @@ export default async function AdminOrderDetailPage({
                         <td className="px-4 py-3 text-sm text-gray-800">{item.variant_color || '—'}</td>
                         <td className="px-4 py-3 text-sm text-gray-900">{item.quantity}</td>
                         <td className="px-4 py-3 text-sm text-gray-900">{item.points_per_item}</td>
-                        <td className="px-4 py-3 text-sm font-semibold text-gray-900">
+                        <td
+                          className={`px-4 py-3 text-sm font-semibold ${
+                            refunded ? 'text-gray-500 line-through' : 'text-gray-900'
+                          }`}
+                        >
                           {item.total_points}
                         </td>
                         <td className="px-4 py-3 text-sm">
-                          <ItemFulfillmentSelect
-                            orderId={order.id}
-                            itemId={item.id}
-                            currentStatus={item.fulfillment_status ?? 'pending'}
-                            canBeOrdered={unitsToMake(item) > 0}
-                            disabled={isDevMode || order.status === 'cancelled'}
-                          />
-                          {readyStockNote && (
-                            <span className="block text-xs text-gray-700 mt-1">{readyStockNote}</span>
+                          {refunded ? (
+                            <div>
+                              <span
+                                className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${itemFulfillmentPillClasses(item.fulfillment_status)}`}
+                              >
+                                Refunded
+                              </span>
+                              <span className="block text-xs text-gray-700 mt-1">
+                                {orderItemRefundedPoints(item)} pts returned
+                                {item.refunded_with_return && unitsOffShelf > 0 && ', stock put back'}
+                              </span>
+                              {item.refunded_at && (
+                                <span className="block text-xs text-gray-600">
+                                  <FormattedDate date={item.refunded_at} format="datetimeShort" />
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <>
+                              <ItemFulfillmentSelect
+                                orderId={order.id}
+                                itemId={item.id}
+                                currentStatus={item.fulfillment_status ?? 'pending'}
+                                canBeOrdered={unitsToMake(item) > 0}
+                                disabled={isDevMode || order.status === 'cancelled'}
+                              />
+                              {readyStockNote && (
+                                <span className="block text-xs text-gray-700 mt-1">{readyStockNote}</span>
+                              )}
+                              {!isDevMode && !refunds.isFullyRefunded && (
+                                <ItemRefundButton
+                                  orderId={order.id}
+                                  itemId={item.id}
+                                  points={item.total_points}
+                                  canReturnStock={
+                                    unitsOffShelf > 0 && typeof variantInventory === 'number'
+                                  }
+                                />
+                              )}
+                            </>
                           )}
                         </td>
                       </tr>
@@ -305,7 +360,7 @@ export default async function AdminOrderDetailPage({
         </CardContent>
       </Card>
 
-      {order.status !== 'cancelled' && items.length > 0 && (
+      {order.status !== 'cancelled' && activeItems.length > 0 && (
         <Card className="mb-6">
           <CardHeader>
             <h2 className="text-lg font-semibold text-gray-900">Customer Notifications</h2>
@@ -313,7 +368,7 @@ export default async function AdminOrderDetailPage({
           <CardContent>
             <PickupNoticeSender
               orderId={order.id}
-              lines={items.map((item) => ({
+              lines={activeItems.map((item) => ({
                 id: item.id,
                 productName: item.product_name,
                 variantLabel: orderItemVariantLabel(item),

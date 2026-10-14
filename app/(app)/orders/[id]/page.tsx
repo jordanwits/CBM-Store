@@ -15,11 +15,13 @@ import { cbmBranding } from '@/branding';
 import { orderStatusLabel, orderStatusBadgeVariant } from '@/lib/orders/status';
 import {
   isItemAwaitingReady,
+  isItemRefunded,
   itemFulfillmentLabel,
   itemFulfillmentPillClasses,
   summarizeFulfillment,
   unitsToMake,
 } from '@/lib/orders/fulfillment';
+import { orderItemRefundedPoints } from '@/lib/orders/refunds';
 import { resolveVariantImage } from '@/lib/products/variant-image';
 
 export default async function OrderDetailPage({
@@ -106,7 +108,7 @@ export default async function OrderDetailPage({
       supabase
         .from('order_items')
         .select(
-          'id, order_id, product_id, variant_id, product_name, variant_name, variant_size, variant_color, quantity, units_from_stock, made_to_order, points_per_item, total_points, fulfillment_status, products(images), product_variants(color, image_url)'
+          'id, order_id, product_id, variant_id, product_name, variant_name, variant_size, variant_color, quantity, units_from_stock, made_to_order, points_per_item, total_points, fulfillment_status, refunded_restricted_points, refunded_universal_points, products(images), product_variants(color, image_url)'
         )
         .eq('order_id', id),
     ]);
@@ -163,6 +165,10 @@ export default async function OrderDetailPage({
 
   const fulfillment = summarizeFulfillment(items);
   const showFulfillmentDetail = order.status !== 'cancelled' && fulfillment.isPartiallyFulfilled;
+  // Lines refunded on their own (or as part of a whole-order refund since 041)
+  const refundedPoints = items
+    .filter((item: any) => isItemRefunded(item.fulfillment_status))
+    .reduce((sum: number, item: any) => sum + orderItemRefundedPoints(item), 0);
 
   return (
     <div>
@@ -355,18 +361,27 @@ export default async function OrderDetailPage({
                         {item.product_name}
                       </h3>
                     </Link>
-                    {/* "Ordered" is the store's own bookkeeping, so the customer sees it the
-                        same as not ready: still being prepared */}
-                    {showFulfillmentDetail && (
+                    {/* A refunded line says so whatever else is going on with the order */}
+                    {isItemRefunded(item.fulfillment_status) ? (
                       <span
-                        className={`inline-block mb-2 px-2 py-1 rounded-full text-xs font-medium ${itemFulfillmentPillClasses(
-                          isItemAwaitingReady(item.fulfillment_status) ? 'pending' : item.fulfillment_status
-                        )}`}
+                        className={`inline-block mb-2 px-2 py-1 rounded-full text-xs font-medium ${itemFulfillmentPillClasses(item.fulfillment_status)}`}
                       >
-                        {isItemAwaitingReady(item.fulfillment_status)
-                          ? 'Still being prepared'
-                          : itemFulfillmentLabel(item.fulfillment_status)}
+                        Refunded · {orderItemRefundedPoints(item).toLocaleString()} points returned to you
                       </span>
+                    ) : (
+                      /* "Ordered" is the store's own bookkeeping, so the customer sees it the
+                         same as not ready: still being prepared */
+                      showFulfillmentDetail && (
+                        <span
+                          className={`inline-block mb-2 px-2 py-1 rounded-full text-xs font-medium ${itemFulfillmentPillClasses(
+                            isItemAwaitingReady(item.fulfillment_status) ? 'pending' : item.fulfillment_status
+                          )}`}
+                        >
+                          {isItemAwaitingReady(item.fulfillment_status)
+                            ? 'Still being prepared'
+                            : itemFulfillmentLabel(item.fulfillment_status)}
+                        </span>
+                      )
                     )}
                     {item.units_being_made > 0 &&
                       item.fulfillment_status !== 'ready' &&
@@ -405,7 +420,13 @@ export default async function OrderDetailPage({
 
                   {/* Price */}
                   <div className="text-right flex-shrink-0">
-                    <p className="text-2xl font-bold text-gray-900">
+                    <p
+                      className={`text-2xl font-bold ${
+                        isItemRefunded(item.fulfillment_status)
+                          ? 'text-gray-400 line-through'
+                          : 'text-gray-900'
+                      }`}
+                    >
                       {item.total_points.toLocaleString()}
                     </p>
                     <p className="text-sm text-gray-500 mt-1">points</p>
@@ -427,6 +448,11 @@ export default async function OrderDetailPage({
                       {order.total_points.toLocaleString()}
                     </p>
                     <p className="text-sm text-gray-600 mt-1">points redeemed</p>
+                    {refundedPoints > 0 && (
+                      <p className="text-sm font-medium text-rose-800 mt-1">
+                        {refundedPoints.toLocaleString()} points refunded
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>

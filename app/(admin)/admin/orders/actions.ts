@@ -15,6 +15,7 @@ import {
   orderItemVariantLabel,
   ITEM_FULFILLMENT_STATUSES,
   isItemAwaitingReady,
+  isItemRefunded,
   type ItemFulfillmentStatus,
 } from '@/lib/orders/fulfillment';
 import { normalizeOrderNote, ORDER_NOTE_MAX_LENGTH } from '@/lib/orders/notes';
@@ -226,7 +227,10 @@ export async function sendPickupNotice(
     return { success: false, error: 'Failed to load the order items' };
   }
 
-  const allItems = itemsResult.data || [];
+  // A refunded line is no longer part of the order: it is neither ready nor still coming
+  const allItems = (itemsResult.data || []).filter(
+    (item) => !isItemRefunded(item.fulfillment_status)
+  );
   const readyIds = new Set(data.readyItemIds);
 
   const toNoticeItem = (item: (typeof allItems)[number]): PickupNoticeItem => ({
@@ -371,6 +375,12 @@ export async function updateItemFulfillment(data: UpdateItemFulfillmentData) {
 
   if (error) {
     console.error('Error updating item fulfillment:', error);
+
+    // A refunded line is locked in the database (041)
+    if (error.message.includes('has been refunded')) {
+      return { success: false, error: error.message };
+    }
+
     return { success: false, error: 'Failed to update the item' };
   }
 
@@ -536,6 +546,44 @@ export async function restoreDeletedOrder(orderId: string) {
   return { success: true };
 }
 
+/**
+ * The refund functions' own messages are written for staff: say which part blocks the refund
+ * rather than a generic failure.
+ */
+function refundErrorMessage(message: string, fallback: string): string {
+  const knownReasons = [
+    'already been refunded',
+    'left to refund',
+    'not on this order',
+    'Order not found',
+  ];
+
+  return knownReasons.some((reason) => message.includes(reason)) ? message : fallback;
+}
+
+function revalidateRefundedOrder(orderId: string, withReturn: boolean) {
+  // Returned units go back on the shelf, and the storefront quotes stock to customers, so
+  // the cached variant rows behind the catalog and product pages have to be dropped with
+  // them. Only the return path touches inventory; a plain refund leaves it alone.
+  if (withReturn) {
+    revalidateTag('product-variants');
+  }
+
+  revalidatePath('/admin/orders');
+  revalidatePath(`/admin/orders/${orderId}`);
+  revalidatePath('/orders');
+  revalidatePath(`/orders/${orderId}`);
+  revalidatePath('/points-history');
+}
+
+/**
+ * Refund everything on the order that has not been refunded yet, and cancel it.
+ *
+ * The database does the work (refund_order, migration 041) in one transaction: each line
+ * still on the order is refunded the way a single line would be, with return putting back
+ * exactly the units it took from stock, so an order with some lines already refunded gives
+ * back only the rest.
+ */
 export async function refundOrder(
   orderId: string,
   options: { withReturn: boolean }
@@ -549,129 +597,55 @@ export async function refundOrder(
 
   const { supabase, user } = await requireAdmin();
 
-  const { data: order, error: orderError } = await supabase
-    .from('orders')
-    .select('id, user_id, total_points, restricted_points_used, universal_points_used')
-    .eq('id', orderId)
-    .single();
+  const { data: refundedPoints, error } = await supabase.rpc('refund_order', {
+    p_order_id: orderId,
+    p_with_return: options.withReturn,
+    p_refunded_by: user.id,
+  });
 
-  if (orderError || !order) {
-    return { success: false, error: 'Order not found' };
+  if (error) {
+    console.error('Error refunding order:', error);
+    return { success: false, error: refundErrorMessage(error.message, 'Failed to refund the order') };
   }
 
-  // Prevent double refund
-  const { data: existingRefunds } = await supabase
-    .from('points_ledger')
-    .select('id')
-    .eq('order_id', orderId)
-    .gt('delta_points', 0);
+  revalidateRefundedOrder(orderId, options.withReturn);
+  return { success: true, refundedPoints: Number(refundedPoints ?? 0) };
+}
 
-  if (existingRefunds && existingRefunds.length > 0) {
-    return { success: false, error: 'This order has already been refunded' };
+/**
+ * Refund one line of an order: its points go back to the customer and the line is marked
+ * refunded, while the rest of the order carries on. For the item a supplier cannot provide.
+ *
+ * The database does the work (refund_order_item, migration 041). A line in the CBM
+ * collection gives back restricted points first, as checkout spent them first; any other
+ * line gives back universal. Refunding the last line left cancels the order.
+ */
+export async function refundOrderItem(
+  orderId: string,
+  itemId: string,
+  options: { withReturn: boolean }
+) {
+  const isDevMode = !process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder');
+
+  if (isDevMode) {
+    return { success: false, error: 'Order operations require Supabase to be configured.' };
   }
 
-  const totalPts = order.total_points ?? 0;
-  let restrictedRefund = Number((order as { restricted_points_used?: number }).restricted_points_used ?? 0);
-  let universalRefund = Number((order as { universal_points_used?: number }).universal_points_used ?? 0);
-  if (restrictedRefund === 0 && universalRefund === 0 && totalPts > 0) {
-    universalRefund = totalPts;
+  const { supabase, user } = await requireAdmin();
+
+  const { data: refundedPoints, error } = await supabase.rpc('refund_order_item', {
+    p_order_id: orderId,
+    p_item_id: itemId,
+    p_with_return: options.withReturn,
+    p_refunded_by: user.id,
+  });
+
+  if (error) {
+    console.error('Error refunding order item:', error);
+    return { success: false, error: refundErrorMessage(error.message, 'Failed to refund the item') };
   }
 
-  const reasonBase = `Refund${options.withReturn ? ' (with return)' : ''} for order #${orderId.slice(0, 8).toUpperCase()}`;
-
-  if (restrictedRefund > 0) {
-    const { error: rErr } = await supabase.from('points_ledger').insert({
-      user_id: order.user_id,
-      delta_points: restrictedRefund,
-      reason: reasonBase,
-      order_id: orderId,
-      created_by: user.id,
-      point_type: 'restricted',
-    });
-    if (rErr) {
-      console.error('Error refunding CBM points:', rErr);
-      return { success: false, error: 'Failed to refund points' };
-    }
-  }
-
-  if (universalRefund > 0) {
-    const { error: uErr } = await supabase.from('points_ledger').insert({
-      user_id: order.user_id,
-      delta_points: universalRefund,
-      reason: reasonBase,
-      order_id: orderId,
-      created_by: user.id,
-      point_type: 'universal',
-    });
-    if (uErr) {
-      console.error('Error refunding universal points:', uErr);
-      return { success: false, error: 'Failed to refund points' };
-    }
-  }
-
-  if (options.withReturn) {
-    const { data: items } = await supabase
-      .from('order_items')
-      .select('variant_id, units_from_stock, units_from_stock_at_ready')
-      .eq('order_id', orderId);
-
-    if (items && items.length > 0) {
-      for (const item of items) {
-        // Put back exactly what left the shelf. A made-to-order line may have drawn some,
-        // all, or none of its units from stock at checkout, and the made units leave stock
-        // when the line is marked ready, so quantity is the wrong number here.
-        const unitsToReturn =
-          (item.units_from_stock ?? 0) + (item.units_from_stock_at_ready ?? 0);
-
-        if (item.variant_id && unitsToReturn > 0) {
-          const { data: variant } = await supabase
-            .from('product_variants')
-            .select('inventory_count')
-            .eq('id', item.variant_id)
-            .single();
-
-          if (variant && variant.inventory_count !== null) {
-            await supabase
-              .from('product_variants')
-              .update({
-                inventory_count: variant.inventory_count + unitsToReturn,
-              })
-              .eq('id', item.variant_id);
-          }
-        }
-      }
-
-      // The made units are back on the shelf now, so the lines no longer hold any. Without
-      // this, moving a line back to not ready later (if the order is un-cancelled) would put
-      // the same units back a second time. Not a status change, so nothing is drawn.
-      const { error: clearError } = await supabase
-        .from('order_items')
-        .update({ units_from_stock_at_ready: 0 })
-        .eq('order_id', orderId)
-        .gt('units_from_stock_at_ready', 0);
-
-      if (clearError) {
-        console.error('Returned stock but clearing the ready record failed:', clearError);
-      }
-    }
-  }
-
-  // Returned units go back on the shelf, and the storefront now quotes stock to customers,
-  // so the cached variant rows behind the catalog and product pages have to be dropped with
-  // them. Only the return path touches inventory; a plain cancellation leaves it alone.
-  if (options.withReturn) {
-    revalidateTag('product-variants');
-  }
-
-  // Mark order as cancelled
-  await supabase
-    .from('orders')
-    .update({ status: 'cancelled' })
-    .eq('id', orderId);
-
-  revalidatePath('/admin/orders');
-  revalidatePath(`/admin/orders/${orderId}`);
-  revalidatePath('/orders');
-  revalidatePath(`/orders/${orderId}`);
-  return { success: true };
+  revalidateRefundedOrder(orderId, options.withReturn);
+  return { success: true, refundedPoints: Number(refundedPoints ?? 0) };
 }

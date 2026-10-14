@@ -11,6 +11,7 @@ export interface OrderItemFulfillmentInput {
   quantity: number;
   units_from_stock?: number | null;
   made_to_order?: boolean | null;
+  fulfillment_status?: string | null;
 }
 
 export interface OrderItemVariantInput {
@@ -53,7 +54,8 @@ export interface OrderItemProcurement {
  * mug and keychain on the procurement list.
  */
 export function unitsToMake(item: OrderItemFulfillmentInput): number {
-  if (!item.made_to_order) {
+  // A refunded line is not being supplied any more, so there is nothing to procure for it
+  if (!item.made_to_order || isItemRefunded(item.fulfillment_status)) {
     return 0;
   }
 
@@ -81,6 +83,18 @@ export const ITEM_FULFILLMENT_LABELS: Record<ItemFulfillmentStatus, string> = {
 };
 
 /**
+ * A refunded line (041): its points went back to the customer and it is no longer part of
+ * what the order is waiting on. It is not one of ITEM_FULFILLMENT_STATUSES because staff
+ * cannot pick it from the dropdown — only a refund puts a line there, and nothing takes it
+ * back out.
+ */
+export const ITEM_REFUNDED_STATUS = 'refunded';
+
+export function isItemRefunded(status: string | null | undefined): boolean {
+  return status === ITEM_REFUNDED_STATUS;
+}
+
+/**
  * The line cannot be collected yet: not ready, or ordered and on its way. Anything that
  * asks "is this outstanding?" goes through here, so 'ordered' is never mistaken for ready.
  */
@@ -90,11 +104,17 @@ export function isItemAwaitingReady(status: string | null | undefined): boolean 
 
 /** Falls back to the raw value so an unexpected state still reads as something. */
 export function itemFulfillmentLabel(status: string): string {
+  if (isItemRefunded(status)) {
+    return 'Refunded';
+  }
+
   return ITEM_FULFILLMENT_LABELS[status as ItemFulfillmentStatus] ?? status;
 }
 
 export function itemFulfillmentPillClasses(status: string): string {
   switch (status) {
+    case ITEM_REFUNDED_STATUS:
+      return 'bg-rose-100 text-rose-900';
     case 'picked_up':
       return 'bg-green-100 text-green-900';
     case 'ready':
@@ -107,6 +127,7 @@ export function itemFulfillmentPillClasses(status: string): string {
 }
 
 export interface OrderFulfillmentSummary {
+  /** Lines still part of the order: refunded lines are counted apart, not in here. */
   total: number;
   /** Lines not collectable yet, ordered ones included. */
   pending: number;
@@ -114,6 +135,8 @@ export interface OrderFulfillmentSummary {
   ordered: number;
   ready: number;
   pickedUp: number;
+  /** Lines refunded on their own (041), which the order no longer waits on. */
+  refunded: number;
   /** Lines the customer cannot collect yet. */
   outstanding: number;
   /**
@@ -133,9 +156,13 @@ export function summarizeFulfillment(
   let ordered = 0;
   let ready = 0;
   let pickedUp = 0;
+  let refunded = 0;
 
   for (const item of items) {
     switch (item.fulfillment_status) {
+      case ITEM_REFUNDED_STATUS:
+        refunded += 1;
+        break;
       case 'picked_up':
         pickedUp += 1;
         break;
@@ -151,7 +178,7 @@ export function summarizeFulfillment(
     }
   }
 
-  const total = items.length;
+  const total = items.length - refunded;
 
   return {
     total,
@@ -159,6 +186,7 @@ export function summarizeFulfillment(
     ordered,
     ready,
     pickedUp,
+    refunded,
     outstanding: pending,
     isPartiallyFulfilled: pending > 0 && ready + pickedUp > 0,
     isComplete: total > 0 && pickedUp === total,
@@ -169,7 +197,7 @@ export function summarizeFulfillment(
 export function orderItemProcurement(
   item: OrderItemFulfillmentInput
 ): OrderItemProcurement | null {
-  if (!item.made_to_order) {
+  if (!item.made_to_order || isItemRefunded(item.fulfillment_status)) {
     return null;
   }
 
@@ -190,7 +218,6 @@ export function orderItemProcurement(
 }
 
 export interface OrderItemReadyStockInput extends OrderItemFulfillmentInput {
-  fulfillment_status?: string | null;
   units_from_stock_at_ready?: number | null;
 }
 
@@ -206,6 +233,11 @@ export function orderItemReadyStockNote(
   item: OrderItemReadyStockInput,
   variantInventory: number | null | undefined
 ): string | null {
+  // The refund itself says what happened to its stock
+  if (isItemRefunded(item.fulfillment_status)) {
+    return null;
+  }
+
   const taken = item.units_from_stock_at_ready ?? 0;
 
   if (taken > 0) {
