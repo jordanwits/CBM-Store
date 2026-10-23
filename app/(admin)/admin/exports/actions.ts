@@ -1,6 +1,7 @@
 'use server';
 
 import { requireAdmin } from '@/lib/auth/require-admin';
+import { fetchAllRows } from '@/lib/supabase/fetch-all';
 import { revalidatePath } from 'next/cache';
 import {
   generateOrdersCsv,
@@ -29,6 +30,42 @@ function formatMonthName(month: string): string {
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
   return `${monthNames[monthIndex]} ${year}`;
+}
+
+/**
+ * Every row for one export, shared by the single-month and the combined export. The file is
+ * built from whatever comes back, so a query stopped at PostgREST's row cap (1000 by
+ * default) would quietly make it short. Ordered by id after created_at so pages cannot
+ * overlap: an order's lines all share one created_at.
+ */
+function readExportRows(
+  supabase: Awaited<ReturnType<typeof requireAdmin>>['supabase'],
+  exportType: 'orders' | 'order_items' | 'points_ledger',
+  startDate: Date,
+  endDate: Date
+) {
+  return fetchAllRows<any>((from, to) => {
+    const query =
+      exportType === 'order_items'
+        ? supabase
+            .from('order_items')
+            .select(`
+              *,
+              orders!inner(created_at)
+            `)
+            .gte('orders.created_at', startDate.toISOString())
+            .lt('orders.created_at', endDate.toISOString())
+        : supabase
+            .from(exportType)
+            .select('*')
+            .gte('created_at', startDate.toISOString())
+            .lt('created_at', endDate.toISOString());
+
+    return query
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, to);
+  });
 }
 
 /**
@@ -76,12 +113,10 @@ export async function generateMonthlyExport(
 
     // Generate export based on type
     if (exportType === 'orders') {
-      const { data: orders } = await supabase
-        .from('orders')
-        .select('*')
-        .gte('created_at', startDate.toISOString())
-        .lt('created_at', endDate.toISOString())
-        .order('created_at', { ascending: true });
+      const { data: orders, error: readError } = await readExportRows(supabase, 'orders', startDate, endDate);
+      if (readError) {
+        return { success: false, error: `Failed to read orders: ${readError.message}` };
+      }
 
       if (!orders || orders.length === 0) {
         const monthName = formatMonthName(month);
@@ -95,15 +130,10 @@ export async function generateMonthlyExport(
       rowCount = orders.length;
     } else if (exportType === 'order_items') {
       // Get order items for orders in this month
-      const { data: orderItems } = await supabase
-        .from('order_items')
-        .select(`
-          *,
-          orders!inner(created_at)
-        `)
-        .gte('orders.created_at', startDate.toISOString())
-        .lt('orders.created_at', endDate.toISOString())
-        .order('created_at', { ascending: true });
+      const { data: orderItems, error: readError } = await readExportRows(supabase, 'order_items', startDate, endDate);
+      if (readError) {
+        return { success: false, error: `Failed to read order items: ${readError.message}` };
+      }
 
       if (!orderItems || orderItems.length === 0) {
         const monthName = formatMonthName(month);
@@ -116,12 +146,10 @@ export async function generateMonthlyExport(
       csvContent = generateOrderItemsCsv(orderItems);
       rowCount = orderItems.length;
     } else if (exportType === 'points_ledger') {
-      const { data: transactions } = await supabase
-        .from('points_ledger')
-        .select('*')
-        .gte('created_at', startDate.toISOString())
-        .lt('created_at', endDate.toISOString())
-        .order('created_at', { ascending: true });
+      const { data: transactions, error: readError } = await readExportRows(supabase, 'points_ledger', startDate, endDate);
+      if (readError) {
+        return { success: false, error: `Failed to read points transactions: ${readError.message}` };
+      }
 
       if (!transactions || transactions.length === 0) {
         const monthName = formatMonthName(month);
@@ -257,10 +285,15 @@ export async function generateInventorySnapshot(): Promise<ExportResult> {
         .from('products')
         .select('id, name, active, made_to_order, base_usd')
         .order('name', { ascending: true }),
-      supabase
-        .from('product_variants')
-        .select('id, product_id, name, size, color, sku, active, inventory_count, price_adjustment_usd, updated_at')
-        .order('name', { ascending: true }),
+      // Every variant, not the first 1000, or the snapshot would quietly miss stock
+      fetchAllRows<any>((from, to) =>
+        supabase
+          .from('product_variants')
+          .select('id, product_id, name, size, color, sku, active, inventory_count, price_adjustment_usd, updated_at')
+          .order('name', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, to)
+      ),
       supabase
         .from('store_settings')
         .select('usd_to_points_rate')
@@ -534,12 +567,10 @@ export async function generateCombinedExport(
 
     // Generate export based on type (combining all months)
     if (exportType === 'orders') {
-      const { data: orders } = await supabase
-        .from('orders')
-        .select('*')
-        .gte('created_at', startDate.toISOString())
-        .lt('created_at', endDate.toISOString())
-        .order('created_at', { ascending: true });
+      const { data: orders, error: readError } = await readExportRows(supabase, 'orders', startDate, endDate);
+      if (readError) {
+        return { success: false, error: `Failed to read orders: ${readError.message}` };
+      }
 
       if (!orders || orders.length === 0) {
         const startMonthName = formatMonthName(startMonth);
@@ -553,15 +584,10 @@ export async function generateCombinedExport(
       csvContent = generateOrdersCsv(orders);
       rowCount = orders.length;
     } else if (exportType === 'order_items') {
-      const { data: orderItems } = await supabase
-        .from('order_items')
-        .select(`
-          *,
-          orders!inner(created_at)
-        `)
-        .gte('orders.created_at', startDate.toISOString())
-        .lt('orders.created_at', endDate.toISOString())
-        .order('created_at', { ascending: true });
+      const { data: orderItems, error: readError } = await readExportRows(supabase, 'order_items', startDate, endDate);
+      if (readError) {
+        return { success: false, error: `Failed to read order items: ${readError.message}` };
+      }
 
       if (!orderItems || orderItems.length === 0) {
         const startMonthName = formatMonthName(startMonth);
@@ -575,12 +601,10 @@ export async function generateCombinedExport(
       csvContent = generateOrderItemsCsv(orderItems);
       rowCount = orderItems.length;
     } else if (exportType === 'points_ledger') {
-      const { data: transactions } = await supabase
-        .from('points_ledger')
-        .select('*')
-        .gte('created_at', startDate.toISOString())
-        .lt('created_at', endDate.toISOString())
-        .order('created_at', { ascending: true });
+      const { data: transactions, error: readError } = await readExportRows(supabase, 'points_ledger', startDate, endDate);
+      if (readError) {
+        return { success: false, error: `Failed to read points transactions: ${readError.message}` };
+      }
 
       if (!transactions || transactions.length === 0) {
         const startMonthName = formatMonthName(startMonth);

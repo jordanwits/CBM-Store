@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { fetchAllRows } from '@/lib/supabase/fetch-all';
 import { Card, CardHeader, CardContent } from 'core/components/Card';
 import { Button } from 'core/components/Button';
 import Link from 'next/link';
@@ -21,14 +22,22 @@ export default async function AdminReportsPage() {
   if (!isDevMode) {
     const supabase = await createClient();
 
+    // The totals are summed here, so each reads every row rather than the first 1000
     const [ledgerResult, topProductsResult, ordersResult, usersResult] = await Promise.all([
-      supabase.from('points_ledger').select('delta_points, point_type'),
-      supabase.from('order_items').select('product_name, quantity'),
-      supabase.from('orders').select('total_points'),
+      fetchAllRows((from, to) =>
+        supabase.from('points_ledger').select('delta_points, point_type').order('id').range(from, to)
+      ),
+      fetchAllRows((from, to) =>
+        supabase.from('order_items').select('product_name, quantity').order('id').range(from, to)
+      ),
+      fetchAllRows((from, to) =>
+        supabase.from('orders').select('total_points').order('id').range(from, to)
+      ),
       supabase.from('profiles').select('*', { count: 'exact', head: true }),
     ]);
 
-    const ledgerRows = ledgerResult.data || [];
+    // A read that failed partway is left out rather than summed as if it were complete
+    const ledgerRows = ledgerResult.error ? [] : ledgerResult.data;
     for (const r of ledgerRows) {
       const pt = r.point_type === 'restricted' ? 'restricted' : 'universal';
       const d = r.delta_points;
@@ -43,8 +52,8 @@ export default async function AdminReportsPage() {
     }
     totalIssued = issuedUniversal + issuedRestricted;
     totalRedeemed = redeemedUniversal + redeemedRestricted;
-    const topProducts = topProductsResult.data;
-    const orders = ordersResult.data || [];
+    const topProducts = topProductsResult.error ? [] : topProductsResult.data;
+    const orders = ordersResult.error ? [] : ordersResult.data;
     activeUsersCount = usersResult.count || 0;
 
     // Calculate average order value

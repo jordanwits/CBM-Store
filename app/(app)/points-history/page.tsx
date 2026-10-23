@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { fetchAllRows } from '@/lib/supabase/fetch-all';
 import { getJwtSubject } from '@/lib/auth/jwt';
 import { Card, CardHeader, CardContent } from 'core/components/Card';
 import { PageHeader } from 'core/components/PageHeader';
@@ -150,12 +151,13 @@ export default async function PointsHistoryPage({ searchParams }: PointsHistoryP
       return query;
     };
 
-    // Build queries for count, totals, and paginated history
-    let baseQuery = supabase
-      .from('points_ledger')
-      .select('*')
-      .eq('user_id', userId);
-    baseQuery = buildFilteredQuery(baseQuery);
+    // Build queries for count, totals, and paginated history. The totals are summed here, so
+    // they read every row in the period rather than the first 1000.
+    const totalsRows = fetchAllRows<{ delta_points: number }>((from, to) =>
+      buildFilteredQuery(supabase.from('points_ledger').select('delta_points').eq('user_id', userId))
+        .order('id')
+        .range(from, to)
+    );
 
     // Build count query
     let countQuery = supabase
@@ -180,7 +182,7 @@ export default async function PointsHistoryPage({ searchParams }: PointsHistoryP
       supabase.rpc('get_user_points_balance', { p_user_id: userId }),
       supabase.rpc('get_user_points_balances', { p_user_id: userId }),
       countQuery,
-      baseQuery.select('delta_points'), // Get all delta_points for totals calculation
+      totalsRows,
       historyQuery,
     ]);
 
@@ -198,8 +200,9 @@ export default async function PointsHistoryPage({ searchParams }: PointsHistoryP
     hasMore = totalCount > currentPage * itemsPerPage;
     history = historyResult.data || [];
 
-    // Calculate totals for the filtered period (from all records in period)
-    const allDeltaPoints = totalsResult.data || [];
+    // Calculate totals for the filtered period (from all records in period). A read that
+    // failed partway is left out rather than summed as if it were complete.
+    const allDeltaPoints = totalsResult.error ? [] : totalsResult.data;
     totalEarned = allDeltaPoints
       .filter((entry: any) => entry.delta_points > 0)
       .reduce((sum: number, entry: any) => sum + entry.delta_points, 0) || 0;

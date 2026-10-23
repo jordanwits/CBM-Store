@@ -1,5 +1,6 @@
 import { UsersPageClient } from './UsersPageClient';
 import { requireAdmin } from '@/lib/auth/require-admin';
+import { fetchAllRows } from '@/lib/supabase/fetch-all';
 
 export default async function AdminUsersPage() {
   // Check if using placeholder Supabase (dev mode)
@@ -20,11 +21,17 @@ export default async function AdminUsersPage() {
       .select('id,email,phone,full_name,role,active,created_at')
       .order('created_at', { ascending: false });
     
-    // Get point balances for all users efficiently
-    const { data: pointsData } = await supabase
-      .from('points_ledger')
-      .select('user_id, delta_points, point_type');
-    
+    // Every ledger row, not the first 1000: balances are summed from them, and this is the
+    // page admins check before deducting
+    const { data: ledgerRows, error: ledgerError } = await fetchAllRows((from, to) =>
+      supabase
+        .from('points_ledger')
+        .select('user_id, delta_points, point_type')
+        .order('id')
+        .range(from, to)
+    );
+    const pointsData = ledgerError ? null : ledgerRows;
+
     const balancesMap = new Map<string, number>();
     const universalMap = new Map<string, number>();
     const restrictedMap = new Map<string, number>();

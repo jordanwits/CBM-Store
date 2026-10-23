@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { fetchAllRows } from '@/lib/supabase/fetch-all';
 import { cache } from 'react';
 import { unstable_cache } from 'next/cache';
 
@@ -135,12 +136,18 @@ export const getVariantsByProductIds = unstable_cache(
 // drops it along with everything else.
 const getVariantStockSummaryInternal = cache(async () => {
   const supabase = await createReadClient();
-  const { data } = await supabase
-    .from('product_variants')
-    .select('product_id, inventory_count')
-    .eq('active', true);
+  // Every active variant, not the first 1000: a product whose rows fell past the cap would
+  // read as having no stock rows at all, which shows as "In stock"
+  const { data, error } = await fetchAllRows((from, to) =>
+    supabase
+      .from('product_variants')
+      .select('product_id, inventory_count')
+      .eq('active', true)
+      .order('id')
+      .range(from, to)
+  );
 
-  return data || [];
+  return error ? [] : data;
 });
 
 export const getVariantStockSummary = unstable_cache(

@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { fetchAllRows } from '@/lib/supabase/fetch-all';
 import { Card, CardHeader, CardContent } from 'core/components/Card';
 import { Button } from 'core/components/Button';
 import { Badge } from 'core/components/Badge';
@@ -128,23 +129,19 @@ export default async function AdminPointsPage({ searchParams }: AdminPointsPageP
       return query;
     };
 
-    // Build queries for count, totals, unique users, and paginated history
-    let baseQuery = supabase
-      .from('points_ledger')
-      .select('*');
-    baseQuery = buildFilteredQuery(baseQuery);
-
     // Build count query
     let countQuery = supabase
       .from('points_ledger')
       .select('id', { count: 'exact', head: true });
     countQuery = buildFilteredQuery(countQuery);
 
-    // Build unique users query
-    let uniqueUsersQuery = supabase
-      .from('points_ledger')
-      .select('user_id', { count: 'exact', head: false });
-    uniqueUsersQuery = buildFilteredQuery(uniqueUsersQuery);
+    // Every filtered row, for the totals and the unique-user count, which are worked out
+    // here and would come out short from the first 1000 alone
+    const totalsRows = fetchAllRows<{ user_id: string; delta_points: number }>((from, to) =>
+      buildFilteredQuery(supabase.from('points_ledger').select('user_id, delta_points'))
+        .order('id')
+        .range(from, to)
+    );
 
     // Build paginated transactions query
     let transactionsQuery = supabase
@@ -157,10 +154,9 @@ export default async function AdminPointsPage({ searchParams }: AdminPointsPageP
       .range((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage - 1);
 
     // Run queries in parallel
-    const [countResult, totalsResult, uniqueUsersResult, transactionsResult] = await Promise.all([
+    const [countResult, totalsResult, transactionsResult] = await Promise.all([
       countQuery,
-      baseQuery.select('delta_points'), // Get all delta_points for totals calculation
-      uniqueUsersQuery,
+      totalsRows,
       transactionsQuery,
     ]);
 
@@ -168,12 +164,13 @@ export default async function AdminPointsPage({ searchParams }: AdminPointsPageP
     hasMore = totalCount > currentPage * itemsPerPage;
     transactions = transactionsResult.data || [];
 
+    // A read that failed partway is left out rather than summed as if it were complete
+    const allDeltaPoints = totalsResult.error ? [] : totalsResult.data;
+
     // Calculate unique users
-    const allUserIds = uniqueUsersResult.data || [];
-    uniqueUsers = new Set(allUserIds.map((entry: any) => entry.user_id)).size;
+    uniqueUsers = new Set(allDeltaPoints.map((entry) => entry.user_id)).size;
 
     // Calculate totals and average transaction value for the filtered period
-    const allDeltaPoints = totalsResult.data || [];
     totalEarned = allDeltaPoints
       .filter((entry: any) => entry.delta_points > 0)
       .reduce((sum: number, entry: any) => sum + entry.delta_points, 0) || 0;

@@ -85,6 +85,23 @@ function generatePointsLedgerCsv(transactions: any[]): string {
   return arrayToCsv(transactions, headers);
 }
 
+// Every row a query matches, a page at a time (copied from lib/supabase/fetch-all.ts).
+// PostgREST stops at its row cap (1000 by default) without saying so, which would quietly
+// make the file short. `page` must order by something unique.
+async function fetchAllRows(
+  page: (from: number, to: number) => PromiseLike<{ data: any[] | null; error: { message: string } | null }>,
+  pageSize = 1000
+): Promise<{ data: any[]; error: { message: string } | null }> {
+  const rows: any[] = [];
+  for (let from = 0; ; ) {
+    const { data, error } = await page(from, from + pageSize - 1);
+    if (error) return { data: rows, error };
+    if (!data || data.length === 0) return { data: rows, error: null };
+    rows.push(...data);
+    from += data.length;
+  }
+}
+
 async function generateExport(
   supabase: any,
   month: string,
@@ -115,14 +132,21 @@ async function generateExport(
 
     // Generate export based on type
     if (exportType === 'orders') {
-      const { data: orders } = await supabase
-        .from('orders')
-        .select('*')
-        .gte('created_at', startDate.toISOString())
-        .lt('created_at', endDate.toISOString())
-        .order('created_at', { ascending: true });
+      const { data: orders, error: readError } = await fetchAllRows((from, to) =>
+        supabase
+          .from('orders')
+          .select('*')
+          .gte('created_at', startDate.toISOString())
+          .lt('created_at', endDate.toISOString())
+          .order('created_at', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, to)
+      );
+      if (readError) {
+        return { success: false, type: exportType, error: readError.message };
+      }
 
-      data = orders || [];
+      data = orders;
       if (data.length === 0) {
         return { success: false, type: exportType, error: 'No data found' };
       }
@@ -130,17 +154,25 @@ async function generateExport(
       csvContent = generateOrdersCsv(data);
       rowCount = data.length;
     } else if (exportType === 'order_items') {
-      const { data: orderItems } = await supabase
-        .from('order_items')
-        .select(`
-          *,
-          orders!inner(created_at)
-        `)
-        .gte('orders.created_at', startDate.toISOString())
-        .lt('orders.created_at', endDate.toISOString())
-        .order('created_at', { ascending: true });
+      // Ordered by id too: an order's lines all share one created_at
+      const { data: orderItems, error: readError } = await fetchAllRows((from, to) =>
+        supabase
+          .from('order_items')
+          .select(`
+            *,
+            orders!inner(created_at)
+          `)
+          .gte('orders.created_at', startDate.toISOString())
+          .lt('orders.created_at', endDate.toISOString())
+          .order('created_at', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, to)
+      );
+      if (readError) {
+        return { success: false, type: exportType, error: readError.message };
+      }
 
-      data = orderItems || [];
+      data = orderItems;
       if (data.length === 0) {
         return { success: false, type: exportType, error: 'No data found' };
       }
@@ -148,14 +180,21 @@ async function generateExport(
       csvContent = generateOrderItemsCsv(data);
       rowCount = data.length;
     } else if (exportType === 'points_ledger') {
-      const { data: transactions } = await supabase
-        .from('points_ledger')
-        .select('*')
-        .gte('created_at', startDate.toISOString())
-        .lt('created_at', endDate.toISOString())
-        .order('created_at', { ascending: true });
+      const { data: transactions, error: readError } = await fetchAllRows((from, to) =>
+        supabase
+          .from('points_ledger')
+          .select('*')
+          .gte('created_at', startDate.toISOString())
+          .lt('created_at', endDate.toISOString())
+          .order('created_at', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, to)
+      );
+      if (readError) {
+        return { success: false, type: exportType, error: readError.message };
+      }
 
-      data = transactions || [];
+      data = transactions;
       if (data.length === 0) {
         return { success: false, type: exportType, error: 'No data found' };
       }
