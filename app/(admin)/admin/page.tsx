@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server';
+import { requireAdmin } from '@/lib/auth/require-admin';
 import { Card, CardHeader, CardContent } from 'core/components/Card';
 import { FormattedDate } from 'core/components/FormattedDate';
 import Link from 'next/link';
@@ -15,7 +15,9 @@ export default async function AdminDashboardPage() {
   let recentOrders: any[] = [];
   
   if (!isDevMode) {
-    const supabase = await createClient();
+    // The service role: a whole orders row includes staff notes, which signed-in users
+    // cannot read (migration 045), an admin's own session included
+    const { supabase } = await requireAdmin();
 
     // Run all dashboard queries in parallel for faster loading
     const [usersResult, productsResult, ordersResult, recentOrdersResult] = await Promise.all([

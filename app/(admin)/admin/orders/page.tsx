@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server';
+import { requireAdmin } from '@/lib/auth/require-admin';
 import { Card, CardHeader, CardContent } from 'core/components/Card';
 import { Button } from 'core/components/Button';
 import { FormattedDate } from 'core/components/FormattedDate';
@@ -30,7 +30,9 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
   let stats = { new: 0, completed: 0, pending: 0 };
 
   if (!isDevMode) {
-    const supabase = await createClient();
+    // The service role: the list shows staff notes, which signed-in users cannot read
+    // (migration 045), an admin's own session included
+    const { supabase } = await requireAdmin();
 
     const dateFilter =
       daysFilter === 9999

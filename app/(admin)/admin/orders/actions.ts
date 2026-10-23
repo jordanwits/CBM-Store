@@ -19,6 +19,8 @@ import {
   type ItemFulfillmentStatus,
 } from '@/lib/orders/fulfillment';
 import { normalizeOrderNote, ORDER_NOTE_MAX_LENGTH } from '@/lib/orders/notes';
+import { summarizeOrderRefunds } from '@/lib/orders/refunds';
+import { statusChangeBlockedReason } from '@/lib/orders/status';
 
 const VALID_STATUSES = ['new', 'processing', 'shipped', 'delivered', 'cancelled'] as const;
 type OrderStatus = typeof VALID_STATUSES[number];
@@ -77,6 +79,27 @@ export async function updateOrderStatus(
 
   if (!existingOrder) {
     return { success: false, error: 'Order not found' };
+  }
+
+  // Refunds are read from the ledger, the same way the refund functions read them
+  const { data: ledgerRefunds, error: refundsError } = await supabase
+    .from('points_ledger')
+    .select('delta_points, point_type')
+    .eq('order_id', data.orderId)
+    .gt('delta_points', 0);
+
+  if (refundsError) {
+    console.error('Error reading order refunds:', refundsError);
+    return { success: false, error: 'Failed to update order status' };
+  }
+
+  const blocked = statusChangeBlockedReason(
+    existingOrder.status,
+    data.status,
+    summarizeOrderRefunds(existingOrder, ledgerRefunds ?? [])
+  );
+  if (blocked) {
+    return { success: false, error: blocked };
   }
 
   const statusChanged = existingOrder.status !== data.status;

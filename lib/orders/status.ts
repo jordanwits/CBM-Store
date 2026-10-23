@@ -29,6 +29,31 @@ export function orderStatusLabel(status: string): string {
   );
 }
 
+/**
+ * Why staff can't move an order from `current` to `next`, or null when they can. Shared by
+ * the status picker and the save, so the two never disagree.
+ *
+ * Cancelling is the Refund button's job while the order still has points out: it gives
+ * them back, asks whether the stock goes back too, and cancels the order itself. Picking
+ * Cancelled here used to do none of that while telling the customer it was cancelled. And
+ * an order whose points have all gone back can't be reopened, or the customer would get
+ * the items without paying.
+ */
+export function statusChangeBlockedReason(
+  current: string,
+  next: string,
+  refunds: { left: number; isFullyRefunded: boolean }
+): string | null {
+  if (next === current) return null;
+  if (next === 'cancelled' && refunds.left > 0) {
+    return 'To cancel this order, use Refund: it gives the points back and asks whether the stock goes back too.';
+  }
+  if (refunds.isFullyRefunded) {
+    return "This order's points have all been refunded, so it can't be reopened.";
+  }
+  return null;
+}
+
 /** Options for the admin status picker, in the order staff move through them. */
 export const ORDER_STATUS_OPTIONS = ORDER_STATUSES.map((value) => ({
   value,

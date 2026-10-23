@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server';
+import { requireAdmin } from '@/lib/auth/require-admin';
 import { Card, CardHeader, CardContent } from 'core/components/Card';
 import { BackButton } from 'core/components/BackButton';
 import { FormattedDate } from 'core/components/FormattedDate';
@@ -38,7 +38,9 @@ export default async function AdminOrderDetailPage({
     notFound();
   }
   
-  const supabase = await createClient();
+  // The service role, as every admin action uses: staff notes are not readable by signed-in
+  // users (migration 045), and that includes an admin's own session
+  const { supabase } = await requireAdmin();
 
   // Run queries in parallel for faster loading
   const [orderResult, itemsResult, ledgerRefunds] = await Promise.all([
@@ -85,10 +87,13 @@ export default async function AdminOrderDetailPage({
           </p>
         </div>
         <div className="flex flex-col gap-4 items-stretch sm:items-end w-full sm:w-auto">
+          {/* Keyed on what it edits, so a refresh after a refund or a save starts it afresh */}
           <OrderStatusEditor
+            key={`${order.status}|${order.tracking_number ?? ''}|${refunds.left}`}
             orderId={order.id}
             currentStatus={order.status}
             currentTrackingNumber={order.tracking_number}
+            refunds={refunds}
             isDevMode={isDevMode}
           />
           <OrderActions
@@ -326,6 +331,7 @@ export default async function AdminOrderDetailPage({
                           ) : (
                             <>
                               <ItemFulfillmentSelect
+                                key={`${item.id}|${item.fulfillment_status}`}
                                 orderId={order.id}
                                 itemId={item.id}
                                 currentStatus={item.fulfillment_status ?? 'pending'}
@@ -366,7 +372,9 @@ export default async function AdminOrderDetailPage({
             <h2 className="text-lg font-semibold text-gray-900">Customer Notifications</h2>
           </CardHeader>
           <CardContent>
+            {/* Its ready ticks are worked out from the line statuses when it mounts */}
             <PickupNoticeSender
+              key={activeItems.map((item) => `${item.id}:${item.fulfillment_status}`).join(',')}
               orderId={order.id}
               lines={activeItems.map((item) => ({
                 id: item.id,

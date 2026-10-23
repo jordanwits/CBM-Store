@@ -5,21 +5,27 @@ import { useRouter } from 'next/navigation';
 import { Button } from 'core/components/Button';
 import { Input } from 'core/components/Input';
 import { updateOrderStatus } from '../actions';
-import { ORDER_STATUS_OPTIONS } from '@/lib/orders/status';
+import { ORDER_STATUS_OPTIONS, statusChangeBlockedReason } from '@/lib/orders/status';
 
 interface OrderStatusEditorProps {
   orderId: string;
   currentStatus: string;
   currentTrackingNumber?: string;
+  /** Points the order could still give back, and whether every point already has */
+  refunds: { left: number; isFullyRefunded: boolean };
   isDevMode: boolean;
 }
 
 const STATUS_OPTIONS = ORDER_STATUS_OPTIONS;
 
-export function OrderStatusEditor({ 
-  orderId, 
-  currentStatus, 
+// The page renders this with a key built from the order's status and reference, so after
+// router.refresh() (a refund, a pickup notice, this save) it starts again from the stored
+// values rather than keeping what it was first given.
+export function OrderStatusEditor({
+  orderId,
+  currentStatus,
   currentTrackingNumber,
+  refunds,
   isDevMode
 }: OrderStatusEditorProps) {
   const router = useRouter();
@@ -45,7 +51,8 @@ export function OrderStatusEditor({
     const result = await updateOrderStatus({
       orderId,
       status,
-      trackingNumber: trackingNumber || undefined,
+      // Always sent, so emptying the box clears the reference (the action stores '' as null)
+      trackingNumber: trackingNumber.trim(),
       notifyCustomer,
     });
 
@@ -107,12 +114,25 @@ export function OrderStatusEditor({
             disabled={loading}
             className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
           >
-            {STATUS_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
+            {STATUS_OPTIONS.map((option) => {
+              const blocked = statusChangeBlockedReason(currentStatus, option.value, refunds);
+              return (
+                <option key={option.value} value={option.value} disabled={blocked !== null}>
+                  {option.label}
+                  {blocked && option.value === 'cancelled' ? ' (use Refund)' : ''}
+                </option>
+              );
+            })}
           </select>
+          {refunds.isFullyRefunded ? (
+            <p className="text-xs text-gray-600 mt-1">
+              Every point on this order has been refunded, so it stays cancelled.
+            </p>
+          ) : refunds.left > 0 && currentStatus !== 'cancelled' ? (
+            <p className="text-xs text-gray-600 mt-1">
+              To cancel, use Refund: it gives the points back and asks about the stock.
+            </p>
+          ) : null}
         </div>
 
         <Input
