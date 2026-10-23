@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { normalizeE164Phone } from '@/lib/auth/phone';
+import { signInErrorMessage } from '@/lib/auth/sign-in-error';
 
 export async function signInWithPhonePassword(input: {
   phone: string;
@@ -57,7 +58,7 @@ export async function signInWithPhonePassword(input: {
   });
 
   if (signError) {
-    return { ok: false, error: signError.message };
+    return { ok: false, error: signInErrorMessage(signError) };
   }
 
   return { ok: true };

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { signInWithPhonePassword } from './actions';
 import { LOGIN_REDIRECT_PARAM, safeRedirectPath } from '@/lib/auth/redirect';
+import { signInErrorMessage } from '@/lib/auth/sign-in-error';
 import { Button } from 'core/components/Button';
 import { Input } from 'core/components/Input';
 import { PhoneInput } from 'core/components/PhoneInput';
@@ -52,7 +53,7 @@ export default function LoginPage() {
           password,
         });
         if (signError) {
-          setError(signError.message);
+          setError(signInErrorMessage(signError));
         } else {
           router.push(destination);
           router.refresh();
