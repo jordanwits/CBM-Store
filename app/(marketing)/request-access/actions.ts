@@ -2,6 +2,8 @@
 
 import { createAdminClient } from '@/lib/supabase/admin';
 import { sendEmail, getAdminEmails, getSiteUrl } from '@/lib/email/resend';
+import { escapeHtml } from '@/lib/email/templates';
+import { allowRequest, requesterIp } from '@/lib/rate-limit';
 
 export interface RequestAccessResult {
   success: boolean;
@@ -59,6 +61,12 @@ export async function submitAccessRequest(input: {
     const trimmedName = input.fullName.trim();
     const trimmedMessage = input.message?.trim() || null;
 
+    // Anyone can submit this form, and each request emails the admins, so one network gets a
+    // handful an hour rather than as many as a script can send
+    if (!(await allowRequest(`access-request:ip:${await requesterIp()}`, 3600, 5))) {
+      return { success: false, error: 'Too many requests from your network. Please try again later.' };
+    }
+
     // In dev mode, skip DB insert but still try to send email notification
     if (isDevMode()) {
       console.log('[Access Request] Dev mode - skipping database insert:', {
@@ -97,19 +105,20 @@ export async function submitAccessRequest(input: {
       };
     }
 
-    // Check if user already has an account
+    // Check if user already has an account. Looked up by address rather than with
+    // listUsers(), which returns one page of 50 and so missed everyone after the first page.
+    // Profiles hold the address as Auth stores it, in lower case.
     let userExists = false;
-    try {
-      const { data: existingUsers, error: listUsersError } = await supabase.auth.admin.listUsers();
-      if (listUsersError) {
-        console.error('[Access Request] Error listing users:', listUsersError);
-        // Continue anyway - worst case we allow a duplicate request
-      } else {
-        userExists = existingUsers?.users?.some(u => u.email?.toLowerCase() === trimmedEmail) ?? false;
-      }
-    } catch (error) {
-      console.error('[Access Request] Exception listing users:', error);
-      // Continue anyway
+    const { data: existingProfile, error: profileLookupError } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('email', trimmedEmail)
+      .limit(1);
+    if (profileLookupError) {
+      console.error('[Access Request] Error looking up existing account:', profileLookupError);
+      // Continue anyway - worst case we allow a duplicate request
+    } else {
+      userExists = (existingProfile?.length ?? 0) > 0;
     }
     
     if (userExists) {
@@ -199,14 +208,20 @@ export async function submitAccessRequest(input: {
 
     console.log('[Access Request] Successfully inserted request:', insertData[0]?.id);
 
-    // Send email notification to admins (non-blocking - don't fail if email fails)
+    // Send email notification to admins (non-blocking - don't fail if email fails). Capped
+    // across the whole form, since a flood can come from many networks at once; past the cap
+    // the request is still saved and shows on the users page.
     try {
-      await sendAdminNotification({
-        email: trimmedEmail,
-        fullName: trimmedName,
-        message: trimmedMessage,
-      });
-      console.log('[Access Request] Admin notification sent successfully');
+      if (await allowRequest('access-request:admin-email', 3600, 20)) {
+        await sendAdminNotification({
+          email: trimmedEmail,
+          fullName: trimmedName,
+          message: trimmedMessage,
+        });
+        console.log('[Access Request] Admin notification sent successfully');
+      } else {
+        console.warn('[Access Request] Hourly admin email limit reached; request saved without an email');
+      }
     } catch (emailError) {
       console.error('[Access Request] Failed to send admin notification:', emailError);
       // Don't fail the request if email fails - the request is already saved
@@ -240,14 +255,21 @@ async function sendAdminNotification(request: {
 
   const siteUrl = getSiteUrl();
   const subject = `New Access Request - ${request.fullName}`;
-  
+
+  // Everything here was typed by an anonymous visitor, and the email goes to admins from
+  // the store's own address, so none of it may become markup (a fake "Go to Admin Panel"
+  // button pointing somewhere else, say)
+  const name = escapeHtml(request.fullName);
+  const email = escapeHtml(request.email);
+  const message = request.message ? escapeHtml(request.message) : null;
+
   const html = `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${subject}</title>
+  <title>New Access Request - ${name}</title>
 </head>
 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
   <div style="background-color: #fef3c7; border-radius: 8px; padding: 30px; margin-bottom: 20px;">
@@ -260,21 +282,21 @@ async function sendAdminNotification(request: {
     <table style="width: 100%; border-collapse: collapse;">
       <tr>
         <td style="padding: 8px 0; border-bottom: 1px solid #f3f4f6;"><strong>Name:</strong></td>
-        <td style="padding: 8px 0; border-bottom: 1px solid #f3f4f6; text-align: right;">${request.fullName}</td>
+        <td style="padding: 8px 0; border-bottom: 1px solid #f3f4f6; text-align: right;">${name}</td>
       </tr>
       <tr>
         <td style="padding: 8px 0; border-bottom: 1px solid #f3f4f6;"><strong>Email:</strong></td>
-        <td style="padding: 8px 0; border-bottom: 1px solid #f3f4f6; text-align: right;">${request.email}</td>
+        <td style="padding: 8px 0; border-bottom: 1px solid #f3f4f6; text-align: right;">${email}</td>
       </tr>
       <tr>
         <td style="padding: 8px 0;"><strong>Date:</strong></td>
         <td style="padding: 8px 0; text-align: right;">${new Date().toLocaleString()}</td>
       </tr>
     </table>
-    ${request.message ? `
+    ${message ? `
     <div style="margin-top: 15px; padding: 15px; background-color: #f3f4f6; border-radius: 6px;">
       <p style="margin: 0 0 5px 0; font-size: 14px; font-weight: bold; color: #666;">Message:</p>
-      <p style="margin: 0; color: #333; white-space: pre-wrap;">${request.message}</p>
+      <p style="margin: 0; color: #333; white-space: pre-wrap;">${message}</p>
     </div>
     ` : ''}
   </div>

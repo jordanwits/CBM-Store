@@ -318,8 +318,9 @@ interface PickupNoticeData {
 /**
  * Product names and staff notes are the first email content that isn't a number or a
  * fixed string, so an ampersand in a product name would otherwise render as broken markup.
+ * Exported for the emails built outside this file from text someone typed.
  */
-function escapeHtml(value: string): string {
+export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
