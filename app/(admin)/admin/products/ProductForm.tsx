@@ -142,40 +142,55 @@ export function ProductForm({ mode, productId, initialData, isDevMode }: Product
     };
 
     let result;
+    // Variants that did not save, so the product isn't reported as complete when it isn't
+    const failedVariants: string[] = [];
+    let createdProductId: string | undefined;
     if (mode === 'create') {
       result = await createProduct(data);
-      
+      createdProductId = result.productId;
+
       // If product created successfully and there are pending variants, create them
       if (result.success && result.productId && pendingVariants.length > 0) {
         const { createVariant } = await import('./actions');
-        
-        let successCount = 0;
+
         for (const variant of pendingVariants) {
           const variantResult = await createVariant({
             ...variant,
             product_id: result.productId,
           });
-          if (variantResult.success) {
-            successCount++;
+          if (!variantResult.success) {
+            failedVariants.push(`${variant.name} (${variantResult.error || 'failed'})`);
           }
         }
-        
-        console.log(`Created ${successCount} of ${pendingVariants.length} variants`);
       }
     } else {
       result = await updateProduct(productId!, data);
     }
 
-    setLoading(false);
-
-    if (result.success) {
-      setMessage({ type: 'success', text: `Product ${mode === 'create' ? 'created' : 'updated'} successfully!` });
-      setTimeout(() => {
-        router.push('/admin/products');
-      }, 1500);
-    } else {
+    if (!result.success) {
+      setLoading(false);
       setMessage({ type: 'error', text: result.error || `Failed to ${mode} product` });
+      return;
     }
+
+    // The button stays disabled until the page moves on, or a second click in that gap
+    // would create the product twice
+    if (failedVariants.length > 0 && createdProductId) {
+      setMessage({
+        type: 'error',
+        text: `The product was created, but ${failedVariants.length} of ${pendingVariants.length} variants were not: ${failedVariants.join('; ')}. Opening the product so you can add them.`,
+      });
+      const createdId = createdProductId;
+      setTimeout(() => {
+        router.push(`/admin/products/${createdId}/edit`);
+      }, 5000);
+      return;
+    }
+
+    setMessage({ type: 'success', text: `Product ${mode === 'create' ? 'created' : 'updated'} successfully!` });
+    setTimeout(() => {
+      router.push('/admin/products');
+    }, 1500);
   };
 
   return (

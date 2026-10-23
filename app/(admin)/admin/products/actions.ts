@@ -1,6 +1,7 @@
 'use server';
 
 import { requireAdmin } from '@/lib/auth/require-admin';
+import { variantConflict } from '@/lib/products/variant-set';
 import { revalidatePath, revalidateTag } from 'next/cache';
 
 export async function updateConversionRate(newRate: number) {
@@ -162,8 +163,12 @@ export async function setProductActive(productId: string, active: boolean) {
     console.error('Error updating product status:', error);
     return { success: false, error: 'Failed to update product status' };
   }
-  
-  // Revalidate relevant pages
+
+  // The tags as well as the paths, the same as an edit: the cart and checkout read products
+  // through the 'products' cache, which no path covers, and the filters list what active
+  // products offer
+  revalidateTag('products');
+  revalidateTag('filter-metadata');
   revalidatePath('/admin/products');
   revalidatePath('/dashboard');
   revalidatePath(`/product/${productId}`);
@@ -203,7 +208,25 @@ export async function createVariant(data: VariantData) {
   if (!data.product_id || !data.name) {
     return { success: false, error: 'Product ID and name are required' };
   }
-  
+
+  // Checked here as well as in the forms, so the matrix builder can't add a second copy of
+  // a variant, or one the product page could never offer
+  const { data: siblings, error: siblingsError } = await supabase
+    .from('product_variants')
+    .select('name, size, color')
+    .eq('product_id', data.product_id)
+    .eq('active', true);
+
+  if (siblingsError) {
+    console.error('Error reading variants before creating one:', siblingsError);
+    return { success: false, error: 'Failed to create variant' };
+  }
+
+  const conflict = variantConflict(siblings ?? [], data);
+  if (conflict) {
+    return { success: false, error: conflict };
+  }
+
   const { data: variant, error } = await supabase
     .from('product_variants')
     .insert({
@@ -249,6 +272,42 @@ export async function updateVariant(variantId: string, data: Partial<VariantData
   }
 
   const { supabase } = await requireAdmin();
+
+  const { data: current, error: currentError } = await supabase
+    .from('product_variants')
+    .select('product_id, name, size, color')
+    .eq('id', variantId)
+    .maybeSingle();
+
+  if (currentError) {
+    console.error('Error reading variant before updating it:', currentError);
+    return { success: false, error: 'Failed to update variant' };
+  }
+  if (!current) {
+    return { success: false, error: 'Variant not found' };
+  }
+
+  // The variant as it would be after this save, against the product's other variants
+  const { data: siblings, error: siblingsError } = await supabase
+    .from('product_variants')
+    .select('name, size, color')
+    .eq('product_id', current.product_id)
+    .eq('active', true)
+    .neq('id', variantId);
+
+  if (siblingsError) {
+    console.error('Error reading variants before updating one:', siblingsError);
+    return { success: false, error: 'Failed to update variant' };
+  }
+
+  const conflict = variantConflict(siblings ?? [], {
+    name: data.name || current.name,
+    size: data.size !== undefined ? data.size : current.size,
+    color: data.color !== undefined ? data.color : current.color,
+  });
+  if (conflict) {
+    return { success: false, error: conflict };
+  }
 
   let query = supabase
     .from('product_variants')

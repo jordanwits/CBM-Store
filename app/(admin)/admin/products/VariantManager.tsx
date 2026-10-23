@@ -240,25 +240,45 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
     image_url?: string;
   }>) => {
     setLoading(true);
-    // Create all combinations as variants
-    for (const combo of combinations) {
-      await createVariant({
-        product_id: productId,
-        name: combo.label,
-        sku: combo.sku,
-        size: combo.size,
-        color: combo.color,
-        price_adjustment_usd: combo.price_adjustment_usd,
-        inventory_count: combo.inventory_count,
-        image_url: combo.image_url,
-      });
+    // Each combination is saved on its own and can be refused (a repeat of a variant the
+    // product already has, say), so the ones that did not go in are named rather than lost
+    const failed: string[] = [];
+    try {
+      for (const combo of combinations) {
+        const result = await createVariant({
+          product_id: productId,
+          name: combo.label,
+          sku: combo.sku,
+          size: combo.size,
+          color: combo.color,
+          price_adjustment_usd: combo.price_adjustment_usd,
+          inventory_count: combo.inventory_count,
+          image_url: combo.image_url,
+        });
+        if (!result.success) {
+          failed.push(`${combo.label} (${result.error || 'failed'})`);
+        }
+      }
+    } catch {
+      failed.push('the rest could not be saved because the connection failed');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
     setShowMatrix(false);
-    setMessage({ type: 'success', text: `${combinations.length} variants created successfully!` });
-    setTimeout(() => {
-      window.location.reload();
-    }, 1500);
+
+    if (failed.length === 0) {
+      setMessage({ type: 'success', text: `${combinations.length} variants created successfully!` });
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+      return;
+    }
+
+    // No automatic reload, which would clear this; the created ones show on the next one
+    setMessage({
+      type: 'error',
+      text: `Not every variant was created. Not saved: ${failed.join('; ')}. Reload the page to see the ones that were.`,
+    });
   };
 
   // If showing matrix builder, render that instead

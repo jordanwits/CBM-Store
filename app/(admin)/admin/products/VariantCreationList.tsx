@@ -5,6 +5,7 @@ import { Button } from 'core/components/Button';
 import { Input } from 'core/components/Input';
 import { uploadProductImage } from './actions';
 import { confirmSmallImages, prepareImageForUpload } from '@/lib/products/prepare-image-upload';
+import { variantConflict } from '@/lib/products/variant-set';
 import { VariantMatrixBuilder } from './VariantMatrixBuilder';
 import { sizeOptions, colorOptions, CUSTOM_VALUE } from './variantOptions';
 
@@ -26,50 +27,72 @@ interface VariantCreationListProps {
   disabled: boolean;
 }
 
+const EMPTY_FORM = {
+  value: '',
+  size: '',
+  color: '',
+  sku: '',
+  price_adjustment_usd: '0',
+  inventory_count: '',
+  image_url: '',
+};
+
 export function VariantCreationList({ variants, onAdd, onRemove, isDevMode, disabled }: VariantCreationListProps) {
   const [isAdding, setIsAdding] = useState(false);
   const [showMatrix, setShowMatrix] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<string | null>(null);
-  
-  const [variantType, setVariantType] = useState<'size' | 'color' | 'custom'>('size');
+  // Why the last variant could not join the list, or what the matrix had to leave out
+  const [listMessage, setListMessage] = useState<string | null>(null);
+
+  // A size, a color, or both on one variant, the same as the edit page. Adding sizes and
+  // colors as separate variants made products whose page asks for one of each and then
+  // finds no variant carrying both, so nothing could be added to a cart.
+  const [variantType, setVariantType] = useState<'sizecolor' | 'custom'>('sizecolor');
   // True when the size/color is typed in manually rather than picked from the list
-  const [isCustomValue, setIsCustomValue] = useState(false);
-  const [formData, setFormData] = useState({
-    value: '',
-    sku: '',
-    price_adjustment_usd: '0',
-    inventory_count: '',
-    image_url: '',
-  });
+  const [isCustomSize, setIsCustomSize] = useState(false);
+  const [isCustomColor, setIsCustomColor] = useState(false);
+  const [formData, setFormData] = useState(EMPTY_FORM);
 
-  const canShowImage = variantType === 'color' || variantType === 'custom';
+  // Built the same way the matrix builder names its combinations
+  const derivedName =
+    variantType === 'custom'
+      ? formData.value.trim()
+      : [formData.size.trim(), formData.color.trim()].filter(Boolean).join(' - ');
 
-  const handleSelectChange = (selected: string) => {
+  const canShowImage = variantType === 'custom' || !!formData.color.trim();
+
+  const handleSizeSelect = (selected: string) => {
     if (selected === CUSTOM_VALUE) {
-      setIsCustomValue(true);
-      setFormData(prev => ({ ...prev, value: '' }));
+      setIsCustomSize(true);
+      setFormData(prev => ({ ...prev, size: '' }));
     } else {
-      setIsCustomValue(false);
-      setFormData(prev => ({ ...prev, value: selected }));
+      setIsCustomSize(false);
+      setFormData(prev => ({ ...prev, size: selected }));
+    }
+  };
+
+  const handleColorSelect = (selected: string) => {
+    if (selected === CUSTOM_VALUE) {
+      setIsCustomColor(true);
+      setFormData(prev => ({ ...prev, color: '' }));
+    } else {
+      setIsCustomColor(false);
+      setFormData(prev => ({ ...prev, color: selected }));
     }
   };
 
   const resetForm = () => {
-    setFormData({
-      value: '',
-      sku: '',
-      price_adjustment_usd: '0',
-      inventory_count: '',
-      image_url: '',
-    });
-    setVariantType('size');
-    setIsCustomValue(false);
+    setFormData(EMPTY_FORM);
+    setVariantType('sizecolor');
+    setIsCustomSize(false);
+    setIsCustomColor(false);
     setUploadMessage(null);
   };
 
   const cancelAdding = () => {
     resetForm();
+    setListMessage(null);
     setIsAdding(false);
   };
 
@@ -84,7 +107,7 @@ export function VariantCreationList({ variants, onAdd, onRemove, isDevMode, disa
 
     setUploading(true);
     setUploadMessage(null);
-    
+
     const formDataUpload = new FormData();
     formDataUpload.append('file', await prepareImageForUpload(file));
 
@@ -100,46 +123,56 @@ export function VariantCreationList({ variants, onAdd, onRemove, isDevMode, disa
     }
   };
 
-  const handleAddAnother = () => {
-    if (!formData.value.trim()) {
-      alert('Please select or enter a variant value');
-      return;
+  /** Adds the form's variant to the list. Returns false when it can't be added. */
+  const handleAddAnother = (): boolean => {
+    if (!derivedName) {
+      setListMessage(
+        variantType === 'custom'
+          ? 'Please enter a variant name'
+          : 'Please choose a size, a color, or both'
+      );
+      return false;
     }
 
     const variant: PendingVariant = {
-      name: formData.value.trim(),
+      name: derivedName,
       sku: formData.sku.trim() || undefined,
       price_adjustment_usd: parseFloat(formData.price_adjustment_usd) || 0,
       inventory_count: formData.inventory_count ? parseInt(formData.inventory_count) : undefined,
     };
 
-    // Add size, color, or leave both undefined for custom
-    if (variantType === 'size') {
-      variant.size = formData.value.trim();
-    } else if (variantType === 'color') {
-      variant.color = formData.value.trim();
-      variant.image_url = formData.image_url.trim() || undefined;
-    } else {
-      // custom variant - no size or color
+    if (variantType === 'sizecolor') {
+      variant.size = formData.size.trim() || undefined;
+      variant.color = formData.color.trim() || undefined;
+    }
+    if (canShowImage) {
       variant.image_url = formData.image_url.trim() || undefined;
     }
 
+    const conflict = variantConflict(variants, variant);
+    if (conflict) {
+      setListMessage(conflict);
+      return false;
+    }
+
     onAdd(variant);
+    setListMessage(null);
     resetForm();
     // Keep the form open for adding more
+    return true;
   };
 
   const handleSaveVariants = () => {
-    if (!formData.value.trim()) {
+    if (!derivedName) {
       // No current form data, just close
       cancelAdding();
       return;
     }
 
-    // Add the current variant first
-    handleAddAnother();
-    // Then close the form
-    setIsAdding(false);
+    // Add the current variant first, then close the form if it went in
+    if (handleAddAnother()) {
+      setIsAdding(false);
+    }
   };
 
   const handleMatrixSave = (combinations: Array<{
@@ -151,9 +184,13 @@ export function VariantCreationList({ variants, onAdd, onRemove, isDevMode, disa
     inventory_count?: number;
     image_url?: string;
   }>) => {
-    // Add all combinations as variants
+    // Checked one at a time against the list as it grows, so the matrix can't repeat a
+    // variant already listed or mix with ones the product page could not offer alongside
+    const accepted: PendingVariant[] = [...variants];
+    const skipped: string[] = [];
+
     combinations.forEach(combo => {
-      onAdd({
+      const variant: PendingVariant = {
         name: combo.label,
         sku: combo.sku,
         size: combo.size,
@@ -161,8 +198,23 @@ export function VariantCreationList({ variants, onAdd, onRemove, isDevMode, disa
         price_adjustment_usd: combo.price_adjustment_usd,
         inventory_count: combo.inventory_count,
         image_url: combo.image_url,
-      });
+      };
+
+      const conflict = variantConflict(accepted, variant);
+      if (conflict) {
+        skipped.push(`${combo.label}: ${conflict}`);
+        return;
+      }
+
+      accepted.push(variant);
+      onAdd(variant);
     });
+
+    setListMessage(
+      skipped.length > 0
+        ? `${skipped.length} of ${combinations.length} combinations were left out. ${skipped.join(' ')}`
+        : null
+    );
     setShowMatrix(false);
   };
 
@@ -215,6 +267,12 @@ export function VariantCreationList({ variants, onAdd, onRemove, isDevMode, disa
         </div>
       )}
 
+      {listMessage && (
+        <div className="rounded-md border border-red-200 bg-red-50 p-3">
+          <p className="text-sm text-red-800">{listMessage}</p>
+        </div>
+      )}
+
       {/* Add Buttons */}
       {!isAdding && (
         <div className="flex gap-2">
@@ -242,7 +300,9 @@ export function VariantCreationList({ variants, onAdd, onRemove, isDevMode, disa
         <div className="space-y-4 p-4 bg-blue-50 rounded-md border border-blue-200">
           <div>
             <h3 className="font-semibold text-gray-900">Add Variants</h3>
-            <p className="text-sm text-gray-600 mt-1">Add size, color, or custom variants separately</p>
+            <p className="text-sm text-gray-600 mt-1">
+              Set a size, a color, or both. Once a product has both, every variant needs both.
+            </p>
           </div>
 
           {/* Variant Type Selector */}
@@ -254,41 +314,25 @@ export function VariantCreationList({ variants, onAdd, onRemove, isDevMode, disa
               <button
                 type="button"
                 onClick={() => {
-                  setVariantType('size');
-                  setIsCustomValue(false);
-                  setFormData({ ...formData, value: '', image_url: '' });
-                }}
-                className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  variantType === 'size'
-                    ? 'bg-primary text-white'
-                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                }`}
-                disabled={disabled}
-              >
-                Size
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setVariantType('color');
-                  setIsCustomValue(false);
+                  setVariantType('sizecolor');
                   setFormData({ ...formData, value: '' });
                 }}
                 className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  variantType === 'color'
+                  variantType === 'sizecolor'
                     ? 'bg-primary text-white'
                     : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
                 }`}
                 disabled={disabled}
               >
-                Color
+                Size / Color
               </button>
               <button
                 type="button"
                 onClick={() => {
                   setVariantType('custom');
-                  setIsCustomValue(false);
-                  setFormData({ ...formData, value: '' });
+                  setIsCustomSize(false);
+                  setIsCustomColor(false);
+                  setFormData({ ...formData, size: '', color: '' });
                 }}
                 className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                   variantType === 'custom'
@@ -303,69 +347,78 @@ export function VariantCreationList({ variants, onAdd, onRemove, isDevMode, disa
           </div>
 
           {/* Variant Value Input */}
-          {variantType === 'size' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Size
-              </label>
-              <select
-                value={isCustomValue ? CUSTOM_VALUE : formData.value}
-                onChange={(e) => handleSelectChange(e.target.value)}
-                disabled={disabled}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-              >
-                <option value="">Select size</option>
-                {sizeOptions.map((size) => (
-                  <option key={size} value={size}>
-                    {size}
-                  </option>
-                ))}
-                <option value={CUSTOM_VALUE}>Custom size...</option>
-              </select>
-              {isCustomValue && (
-                <div className="mt-2">
-                  <Input
-                    type="text"
-                    value={formData.value}
-                    onChange={(e) => setFormData({ ...formData, value: e.target.value })}
-                    disabled={disabled}
-                    placeholder="Enter a custom size (e.g., 34x32)"
-                  />
-                </div>
-              )}
-            </div>
-          )}
+          {variantType === 'sizecolor' && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Size <span className="font-normal text-gray-500">(optional)</span>
+                </label>
+                <select
+                  value={isCustomSize ? CUSTOM_VALUE : formData.size}
+                  onChange={(e) => handleSizeSelect(e.target.value)}
+                  disabled={disabled}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                >
+                  <option value="">No size</option>
+                  {sizeOptions.map((size) => (
+                    <option key={size} value={size}>
+                      {size}
+                    </option>
+                  ))}
+                  <option value={CUSTOM_VALUE}>Custom size...</option>
+                </select>
+                {isCustomSize && (
+                  <div className="mt-2">
+                    <Input
+                      type="text"
+                      value={formData.size}
+                      onChange={(e) => setFormData({ ...formData, size: e.target.value })}
+                      disabled={disabled}
+                      placeholder="Enter a custom size (e.g., 34x32)"
+                    />
+                  </div>
+                )}
+              </div>
 
-          {variantType === 'color' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Color
-              </label>
-              <select
-                value={isCustomValue ? CUSTOM_VALUE : formData.value}
-                onChange={(e) => handleSelectChange(e.target.value)}
-                disabled={disabled}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-              >
-                <option value="">Select color</option>
-                {colorOptions.map((color) => (
-                  <option key={color} value={color}>
-                    {color}
-                  </option>
-                ))}
-                <option value={CUSTOM_VALUE}>Custom color...</option>
-              </select>
-              {isCustomValue && (
-                <div className="mt-2">
-                  <Input
-                    type="text"
-                    value={formData.value}
-                    onChange={(e) => setFormData({ ...formData, value: e.target.value })}
-                    disabled={disabled}
-                    placeholder="Enter a custom color (e.g., Forest Green)"
-                  />
-                </div>
-              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Color <span className="font-normal text-gray-500">(optional)</span>
+                </label>
+                <select
+                  value={isCustomColor ? CUSTOM_VALUE : formData.color}
+                  onChange={(e) => handleColorSelect(e.target.value)}
+                  disabled={disabled}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                >
+                  <option value="">No color</option>
+                  {colorOptions.map((color) => (
+                    <option key={color} value={color}>
+                      {color}
+                    </option>
+                  ))}
+                  <option value={CUSTOM_VALUE}>Custom color...</option>
+                </select>
+                {isCustomColor && (
+                  <div className="mt-2">
+                    <Input
+                      type="text"
+                      value={formData.color}
+                      onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                      disabled={disabled}
+                      placeholder="Enter a custom color (e.g., Forest Green)"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="sm:col-span-2">
+                <p className="text-sm text-gray-600">
+                  Saves as:{' '}
+                  <span className="font-medium text-gray-900">
+                    {derivedName || '—'}
+                  </span>
+                </p>
+              </div>
             </div>
           )}
 
@@ -410,11 +463,11 @@ export function VariantCreationList({ variants, onAdd, onRemove, isDevMode, disa
             />
           </div>
 
-          {/* Image Upload - Only for Color and Custom */}
+          {/* Image Upload - for a variant with a color, or a custom one */}
           {canShowImage && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Variant Image {variantType === 'color' ? '(Recommended)' : '(Optional)'}
+                Variant Image {variantType === 'sizecolor' ? '(Recommended)' : '(Optional)'}
               </label>
               <div className="space-y-2">
                 <input
@@ -439,7 +492,7 @@ export function VariantCreationList({ variants, onAdd, onRemove, isDevMode, disa
                   placeholder="https://..."
                 />
                 <p className="text-xs text-gray-600">
-                  Upload an image showing this specific {variantType}
+                  Upload an image showing this specific {variantType === 'sizecolor' ? 'color' : 'variant'}
                 </p>
               </div>
             </div>
@@ -456,8 +509,8 @@ export function VariantCreationList({ variants, onAdd, onRemove, isDevMode, disa
             <div className="flex gap-2">
               <Button
                 variant="outline"
-                onClick={handleAddAnother}
-                disabled={disabled || !formData.value.trim() || uploading}
+                onClick={() => handleAddAnother()}
+                disabled={disabled || !derivedName || uploading}
               >
                 Add Another
               </Button>
