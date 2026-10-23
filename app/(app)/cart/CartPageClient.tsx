@@ -16,6 +16,7 @@ import { allocateCheckoutSpend, isCbmCollectionProduct } from '@/lib/points/buck
 import {
   availabilityPillClasses,
   variantAvailability,
+  OPTION_REQUIRED,
   VARIANT_UNAVAILABLE,
 } from '@/lib/inventory/availability';
 import { resolveVariantImage } from '@/lib/products/variant-image';
@@ -151,7 +152,9 @@ export default function CartPageClient({ isDevMode }: CartPageClientProps) {
         availability:
           item.variantId && !variant
             ? VARIANT_UNAVAILABLE
-            : variantAvailability(variant, product.made_to_order ?? false, item.quantity),
+            : !item.variantId && productVariants.length > 0
+              ? OPTION_REQUIRED
+              : variantAvailability(variant, product.made_to_order ?? false, item.quantity),
       };
     });
 

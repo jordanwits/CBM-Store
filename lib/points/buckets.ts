@@ -18,7 +18,9 @@ export function allocateCheckoutSpend(
   restrictedBalance: number,
   universalBalance: number
 ): { restrictedSpend: number; universalSpend: number; canAfford: boolean } {
-  const restrictedSpend = Math.min(restrictedBalance, eligiblePoints);
+  // A bucket below zero has nothing to spend (the same floor checkout applies), rather than
+  // a negative spend that universal would have to cover on top of the order
+  const restrictedSpend = Math.max(Math.min(restrictedBalance, eligiblePoints), 0);
   const universalSpend = totalPoints - restrictedSpend;
   const canAfford = universalBalance >= universalSpend;
   return { restrictedSpend, universalSpend, canAfford };

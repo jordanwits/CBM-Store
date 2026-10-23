@@ -192,6 +192,14 @@ export async function placeOrder(formData: FormData): Promise<PlaceOrderResult> 
           success: false,
           error: `Your note is too long. Please keep it under ${ORDER_NOTE_MAX_LENGTH} characters.`,
         };
+      } else if (rpcError.message.includes('Choose a size or color for')) {
+        // Names the product: a line added before it had sizes or colors
+        return {
+          success: false,
+          error: `${rpcError.message}. Remove it from your cart, then add it again from its page.`,
+        };
+      } else if (rpcError.message.includes('This account is inactive')) {
+        return { success: false, error: 'This account has been deactivated, so it cannot place orders.' };
       } else {
         return { success: false, error: 'Failed to place order. Please try again.' };
       }

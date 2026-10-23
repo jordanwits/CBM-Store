@@ -109,6 +109,21 @@ export const VARIANT_UNAVAILABLE: Availability = {
 };
 
 /**
+ * A cart line with no variant for a product that now has variants, because it was added
+ * before the product had sizes or colors. place_points_order refuses it: it would take no
+ * stock and leave staff with no size to hand over.
+ */
+export const OPTION_REQUIRED: Availability = {
+  state: 'out_of_stock',
+  unitsOnHand: null,
+  label: 'Choose a size or color',
+  detail: 'This item now comes in different options. Remove it, then add it again from its page.',
+  tone: 'negative',
+  sufficient: false,
+  unitsToMake: 0,
+};
+
+/**
  * A count left negative by a manual edit is not stock to give away, the same guard
  * place_points_order applies before drawing a made-to-order line down.
  */

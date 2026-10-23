@@ -3,9 +3,43 @@
 import { requireAdmin } from '@/lib/auth/require-admin';
 import { sendEmail, deliverableEmail } from '@/lib/email/resend';
 import { pointsAdjustmentNotificationEmail } from '@/lib/email/templates';
+import { parsePointsBalancesRpc } from '@/lib/points/buckets';
 import { revalidatePath } from 'next/cache';
 
 export type PointBucketType = 'universal' | 'restricted';
+
+const BUCKET_LABEL: Record<PointBucketType, string> = {
+  universal: 'universal',
+  restricted: 'CBM',
+};
+
+/**
+ * Why a deduction can't go ahead, or null when it can. Taking more than a bucket holds is
+ * almost always the wrong bucket or a stale balance, and leaves the customer unable to spend
+ * from that bucket until it is topped back up.
+ */
+async function overdrawnBucketError(
+  supabase: Awaited<ReturnType<typeof requireAdmin>>['supabase'],
+  userId: string,
+  deltaPoints: number,
+  bucket: PointBucketType
+): Promise<string | null> {
+  if (deltaPoints >= 0) return null;
+
+  const { data, error } = await supabase.rpc('get_user_points_balances', { p_user_id: userId });
+  if (error) {
+    console.error('Error reading points balance before a deduction:', error);
+    return 'Could not check the balance, so nothing was deducted';
+  }
+
+  const balance = parsePointsBalancesRpc(data)[bucket];
+  if (balance + deltaPoints >= 0) return null;
+
+  const label = BUCKET_LABEL[bucket];
+  return balance > 0
+    ? `Only ${balance} ${label} points to deduct from, so ${-deltaPoints} can't be taken`
+    : `No ${label} points to deduct from`;
+}
 
 export async function adjustUserPoints(
   userId: string,
@@ -37,6 +71,11 @@ export async function adjustUserPoints(
   }
   
   const bucket: PointBucketType = pointType === 'restricted' ? 'restricted' : 'universal';
+
+  const overdrawn = await overdrawnBucketError(supabase, userId, deltaPoints, bucket);
+  if (overdrawn) {
+    return { success: false, error: `${overdrawn}.` };
+  }
 
   // Insert into points ledger
   const { error } = await supabase
@@ -283,7 +322,18 @@ export async function bulkAdjustPointsFromCsv(formData: FormData): Promise<BulkP
         });
         continue;
       }
-      
+
+      // Rows run in order, so this sees any earlier rows for the same user
+      const overdrawn = await overdrawnBucketError(supabase, user.id, deltaPoints, rowPointType);
+      if (overdrawn) {
+        failures.push({
+          row: rowNumber,
+          email,
+          error: overdrawn,
+        });
+        continue;
+      }
+
       // Insert points adjustment
       const { error: insertError } = await supabase
         .from('points_ledger')
