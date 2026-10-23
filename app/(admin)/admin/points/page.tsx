@@ -137,8 +137,8 @@ export default async function AdminPointsPage({ searchParams }: AdminPointsPageP
 
     // Every filtered row, for the totals and the unique-user count, which are worked out
     // here and would come out short from the first 1000 alone
-    const totalsRows = fetchAllRows<{ user_id: string; delta_points: number }>((from, to) =>
-      buildFilteredQuery(supabase.from('points_ledger').select('user_id, delta_points'))
+    const totalsRows = fetchAllRows<{ user_id: string; delta_points: number; order_id: string | null }>((from, to) =>
+      buildFilteredQuery(supabase.from('points_ledger').select('user_id, delta_points, order_id'))
         .order('id')
         .range(from, to)
     );
@@ -170,15 +170,23 @@ export default async function AdminPointsPage({ searchParams }: AdminPointsPageP
     // Calculate unique users
     uniqueUsers = new Set(allDeltaPoints.map((entry) => entry.user_id)).size;
 
-    // Calculate totals and average transaction value for the filtered period
-    totalEarned = allDeltaPoints
-      .filter((entry: any) => entry.delta_points > 0)
-      .reduce((sum: number, entry: any) => sum + entry.delta_points, 0) || 0;
+    // Calculate totals and average transaction value for the filtered period. A refund is a
+    // positive row against an order: it gives spending back rather than being earned, so it
+    // comes off spent instead of adding to earned (never below zero, for a view filtered to
+    // positive rows only).
+    const refunded = allDeltaPoints
+      .filter((entry) => entry.delta_points > 0 && entry.order_id)
+      .reduce((sum, entry) => sum + entry.delta_points, 0);
 
-    totalSpent = Math.abs(
+    totalEarned = allDeltaPoints
+      .filter((entry) => entry.delta_points > 0 && !entry.order_id)
+      .reduce((sum, entry) => sum + entry.delta_points, 0);
+
+    totalSpent = Math.max(
+      0,
       allDeltaPoints
-        .filter((entry: any) => entry.delta_points < 0)
-        .reduce((sum: number, entry: any) => sum + entry.delta_points, 0) || 0
+        .filter((entry) => entry.delta_points < 0)
+        .reduce((sum, entry) => sum - entry.delta_points, 0) - refunded
     );
 
     // Calculate average transaction value (absolute value of delta_points)

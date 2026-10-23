@@ -49,12 +49,15 @@ function arrayToCsv(data: any[], headers: string[]): string {
   return [headerRow, ...dataRows].join('\n');
 }
 
+// The three generators below carry the same columns as the manual exports in
+// lib/exports/csv-generator.ts, so a month reads the same whichever made it
 function generateOrdersCsv(orders: any[]): string {
   const headers = [
     'id', 'user_id', 'status', 'total_points', 'delivery_method',
     'ship_name', 'ship_address_line1', 'ship_address_line2',
     'ship_city', 'ship_state', 'ship_zip', 'ship_country',
     'tracking_number', 'notes', 'created_at', 'updated_at',
+    'restricted_points_used', 'universal_points_used', 'points_refunded',
   ];
   return arrayToCsv(orders, headers);
 }
@@ -64,13 +67,16 @@ function generateOrderItemsCsv(orderItems: any[]): string {
     'id', 'order_id', 'product_id', 'variant_id',
     'product_name', 'variant_name', 'variant_size', 'variant_color', 'quantity',
     'units_from_stock', 'units_to_make', 'made_to_order', 'fulfillment_status',
-    'points_per_item', 'total_points', 'created_at',
+    'points_per_item', 'total_points',
+    'refunded_at', 'refunded_restricted_points', 'refunded_universal_points', 'refunded_with_return',
+    'created_at',
   ];
   // Mirrors unitsToMake in lib/orders/fulfillment.ts: a stocked line is never made,
-  // whatever its count says, so only made-to-order lines can carry a number here
+  // whatever its count says, and a refunded line needs nothing made at all, so only an
+  // open made-to-order line can carry a number here
   const rows = orderItems.map((item: any) => ({
     ...item,
-    units_to_make: item.made_to_order
+    units_to_make: item.made_to_order && item.fulfillment_status !== 'refunded'
       ? Math.max(0, (item.quantity ?? 0) - (item.units_from_stock ?? 0))
       : 0,
   }));
@@ -80,7 +86,7 @@ function generateOrderItemsCsv(orderItems: any[]): string {
 function generatePointsLedgerCsv(transactions: any[]): string {
   const headers = [
     'id', 'user_id', 'delta_points', 'reason',
-    'order_id', 'created_by', 'created_at',
+    'order_id', 'created_by', 'created_at', 'point_type',
   ];
   return arrayToCsv(transactions, headers);
 }
@@ -110,15 +116,22 @@ async function generateExport(
   endDate: Date
 ): Promise<ExportResult> {
   try {
-    // Check if export already exists
-    const { data: existing } = await supabase
+    // Skip only a month this function has already exported. An admin's manual export of the
+    // same month (created_by set), made part-way through it to check progress, used to
+    // count too, and left that partial file as the only one for the month.
+    const { data: existing, error: existingError } = await supabase
       .from('monthly_exports')
       .select('id')
       .eq('month', month)
       .eq('export_type', exportType)
-      .single();
+      .is('created_by', null)
+      .limit(1);
 
-    if (existing) {
+    if (existingError) {
+      return { success: false, type: exportType, error: existingError.message };
+    }
+
+    if (existing && existing.length > 0) {
       return { 
         success: false, 
         type: exportType,
@@ -146,11 +159,34 @@ async function generateExport(
         return { success: false, type: exportType, error: readError.message };
       }
 
-      data = orders;
-      if (data.length === 0) {
+      if (orders.length === 0) {
         return { success: false, type: exportType, error: 'No data found' };
       }
 
+      // What has gone back on each order so far, from its positive ledger rows, read by order
+      // since a refund can come after the month has closed
+      const refunded = new Map<string, number>();
+      const orderIds: string[] = orders.map((order: any) => order.id);
+      for (let i = 0; i < orderIds.length; i += 100) {
+        const ids = orderIds.slice(i, i + 100);
+        const refunds = await fetchAllRows((from, to) =>
+          supabase
+            .from('points_ledger')
+            .select('order_id, delta_points')
+            .in('order_id', ids)
+            .gt('delta_points', 0)
+            .order('id')
+            .range(from, to)
+        );
+        if (refunds.error) {
+          return { success: false, type: exportType, error: refunds.error.message };
+        }
+        for (const row of refunds.data) {
+          refunded.set(row.order_id, (refunded.get(row.order_id) ?? 0) + row.delta_points);
+        }
+      }
+
+      data = orders.map((order: any) => ({ ...order, points_refunded: refunded.get(order.id) ?? 0 }));
       csvContent = generateOrdersCsv(data);
       rowCount = data.length;
     } else if (exportType === 'order_items') {

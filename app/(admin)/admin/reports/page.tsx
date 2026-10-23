@@ -25,29 +25,38 @@ export default async function AdminReportsPage() {
     // The totals are summed here, so each reads every row rather than the first 1000
     const [ledgerResult, topProductsResult, ordersResult, usersResult] = await Promise.all([
       fetchAllRows((from, to) =>
-        supabase.from('points_ledger').select('delta_points, point_type').order('id').range(from, to)
+        supabase.from('points_ledger').select('delta_points, point_type, order_id').order('id').range(from, to)
+      ),
+      // Lines that were refunded, or sit on a cancelled order, were never really bought
+      fetchAllRows((from, to) =>
+        supabase
+          .from('order_items')
+          .select('product_name, quantity, orders!inner(status)')
+          .neq('fulfillment_status', 'refunded')
+          .neq('orders.status', 'cancelled')
+          .order('id')
+          .range(from, to)
       ),
       fetchAllRows((from, to) =>
-        supabase.from('order_items').select('product_name, quantity').order('id').range(from, to)
+        supabase.from('orders').select('total_points').neq('status', 'cancelled').order('id').range(from, to)
       ),
-      fetchAllRows((from, to) =>
-        supabase.from('orders').select('total_points').order('id').range(from, to)
-      ),
-      supabase.from('profiles').select('*', { count: 'exact', head: true }),
+      supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('active', true),
     ]);
 
     // A read that failed partway is left out rather than summed as if it were complete
     const ledgerRows = ledgerResult.error ? [] : ledgerResult.data;
     for (const r of ledgerRows) {
-      const pt = r.point_type === 'restricted' ? 'restricted' : 'universal';
+      const restricted = r.point_type === 'restricted';
       const d = r.delta_points;
-      if (d > 0) {
-        if (pt === 'restricted') issuedRestricted += d;
+      if (r.order_id) {
+        // Rows against an order are checkout spending (negative) and refunds of it
+        // (positive): a refund gives spending back, it doesn't issue new points
+        if (restricted) redeemedRestricted -= d;
+        else redeemedUniversal -= d;
+      } else {
+        // Everything else is an admin award or correction, counted net
+        if (restricted) issuedRestricted += d;
         else issuedUniversal += d;
-      } else if (d < 0) {
-        const abs = Math.abs(d);
-        if (pt === 'restricted') redeemedRestricted += abs;
-        else redeemedUniversal += abs;
       }
     }
     totalIssued = issuedUniversal + issuedRestricted;

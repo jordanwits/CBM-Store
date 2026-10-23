@@ -38,13 +38,13 @@ function formatMonthName(month: string): string {
  * default) would quietly make it short. Ordered by id after created_at so pages cannot
  * overlap: an order's lines all share one created_at.
  */
-function readExportRows(
+async function readExportRows(
   supabase: Awaited<ReturnType<typeof requireAdmin>>['supabase'],
   exportType: 'orders' | 'order_items' | 'points_ledger',
   startDate: Date,
   endDate: Date
 ) {
-  return fetchAllRows<any>((from, to) => {
+  const read = await fetchAllRows<any>((from, to) => {
     const query =
       exportType === 'order_items'
         ? supabase
@@ -66,6 +66,35 @@ function readExportRows(
       .order('id', { ascending: true })
       .range(from, to);
   });
+
+  if (read.error || exportType !== 'orders' || read.data.length === 0) return read;
+
+  // What has gone back on each order so far: the positive ledger rows against it, the rule
+  // the order pages and the refund functions use. Read by order rather than by date, since
+  // an order can be refunded after its month has closed.
+  const refunded = new Map<string, number>();
+  const orderIds: string[] = read.data.map((order) => order.id);
+  for (let i = 0; i < orderIds.length; i += 100) {
+    const ids = orderIds.slice(i, i + 100);
+    const refunds = await fetchAllRows<{ order_id: string; delta_points: number }>((from, to) =>
+      supabase
+        .from('points_ledger')
+        .select('order_id, delta_points')
+        .in('order_id', ids)
+        .gt('delta_points', 0)
+        .order('id')
+        .range(from, to)
+    );
+    if (refunds.error) return { data: [], error: refunds.error };
+    for (const row of refunds.data) {
+      refunded.set(row.order_id, (refunded.get(row.order_id) ?? 0) + row.delta_points);
+    }
+  }
+
+  return {
+    data: read.data.map((order) => ({ ...order, points_refunded: refunded.get(order.id) ?? 0 })),
+    error: null,
+  };
 }
 
 /**

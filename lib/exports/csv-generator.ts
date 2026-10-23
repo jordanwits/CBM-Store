@@ -66,8 +66,14 @@ export function generateOrdersCsv(orders: any[]): string {
     'notes',
     'created_at',
     'updated_at',
+    // Added at the end so existing spreadsheets keep their columns. total_points is what
+    // checkout charged; points_refunded is what has gone back since, from the ledger, so a
+    // partly refunded order no longer reads as fully paid.
+    'restricted_points_used',
+    'universal_points_used',
+    'points_refunded',
   ];
-  
+
   return arrayToCsv(orders, headers);
 }
 
@@ -261,8 +267,10 @@ export function generatePointsLedgerCsv(transactions: any[]): string {
     'order_id',
     'created_by',
     'created_at',
+    // At the end so existing spreadsheets keep their columns: which bucket the row moved
+    'point_type',
   ];
-  
+
   return arrayToCsv(transactions, headers);
 }
 
