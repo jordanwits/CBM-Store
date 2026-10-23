@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import { useState, useEffect, useMemo } from 'react';
+import { resolveVariantImage } from '@/lib/products/variant-image';
 
 interface Variant {
   id: string;
@@ -18,6 +19,9 @@ interface ImageGalleryProps {
 
 export default function ImageGallery({ images, productName, variants = [], selectedColor }: ImageGalleryProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
+  // The picture for a chosen colour that isn't among the thumbnails: the cover photo when the
+  // colour has none of its own, or null for no picture at all. Cleared by browsing.
+  const [colorOverride, setColorOverride] = useState<{ src: string | null } | null>(null);
   
   // Build complete image array - when color variants have images, use ONLY one per color (no duplicates)
   const allImages = useMemo(() => {
@@ -43,22 +47,25 @@ export default function ImageGallery({ images, productName, variants = [], selec
   // When color changes, switch to that color's image
   // Only runs when selectedColor changes, not when navigating with arrows
   useEffect(() => {
-    if (selectedColor && variants.length > 0) {
-      const colorVariant = variants.find(v => v.color === selectedColor && v.image_url);
-      if (colorVariant && colorVariant.image_url) {
-        const imageIndex = allImages.indexOf(colorVariant.image_url);
-        if (imageIndex >= 0) {
-          setSelectedIndex(imageIndex);
-        }
-      } else if (images.length > 0) {
-        // No specific image for this color, go back to first product image
-        setSelectedIndex(0);
-      }
-    } else if (!selectedColor && images.length > 0) {
-      // When color is cleared, go back to first product image
+    if (!selectedColor) {
+      // When color is cleared, go back to the first image
+      setColorOverride(null);
       setSelectedIndex(0);
+      return;
     }
-  }, [selectedColor, allImages, variants, images.length]); // allImages is memoized, so this is stable
+
+    // The same choice the cart and order pages make: the colour's own photo, then the cover
+    // photo. Index 0 used to stand in for "the cover", but once colours have photos the
+    // thumbnails hold only those, so a colour without one showed another colour's picture.
+    const picture = resolveVariantImage(images, { color: selectedColor }, variants);
+    const imageIndex = picture ? allImages.indexOf(picture) : -1;
+    if (imageIndex >= 0) {
+      setColorOverride(null);
+      setSelectedIndex(imageIndex);
+    } else {
+      setColorOverride({ src: picture ?? null });
+    }
+  }, [selectedColor, allImages, variants, images]); // allImages is memoized, so this is stable
 
   if (!allImages || allImages.length === 0) {
     return (
@@ -75,24 +82,38 @@ export default function ImageGallery({ images, productName, variants = [], selec
   }
 
   const handlePrevious = () => {
+    setColorOverride(null);
     setSelectedIndex((prev) => (prev === 0 ? allImages.length - 1 : prev - 1));
   };
 
   const handleNext = () => {
+    setColorOverride(null);
     setSelectedIndex((prev) => (prev === allImages.length - 1 ? 0 : prev + 1));
   };
+
+  // A list that shrank (variants reloaded) can leave the index past its end
+  const mainImage = colorOverride ? colorOverride.src : allImages[selectedIndex] ?? allImages[0];
 
   return (
     <div className="space-y-4">
       {/* Main Image Display */}
       <div className="aspect-square relative bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl overflow-hidden shadow-lg group">
-        <Image
-          src={allImages[selectedIndex]}
-          alt={`${productName} - Image ${selectedIndex + 1}`}
-          fill
-          className="object-cover object-[center_30%]"
-          priority={selectedIndex === 0}
-        />
+        {mainImage ? (
+          <Image
+            src={mainImage}
+            alt={`${productName} - Image ${selectedIndex + 1}`}
+            fill
+            className="object-cover object-[center_30%]"
+            priority={selectedIndex === 0}
+          />
+        ) : (
+          // The chosen colour has no picture and there is no cover photo to fall back on
+          <div className="w-full h-full flex items-center justify-center">
+            <svg className="w-24 h-24 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          </div>
+        )}
         
         {/* Navigation Arrows - Only show if there are multiple images */}
         {allImages.length > 1 && (
@@ -130,9 +151,12 @@ export default function ImageGallery({ images, productName, variants = [], selec
           {allImages.map((img, idx) => (
             <button
               key={idx}
-              onClick={() => setSelectedIndex(idx)}
+              onClick={() => {
+                setColorOverride(null);
+                setSelectedIndex(idx);
+              }}
               className={`aspect-square relative bg-gray-100 rounded-lg overflow-hidden cursor-pointer transition-all focus:outline-none ${
-                selectedIndex === idx
+                !colorOverride && selectedIndex === idx
                   ? 'ring-4 ring-primary shadow-md scale-95'
                   : 'hover:ring-2 hover:ring-gray-300 hover:scale-105'
               }`}
@@ -144,7 +168,7 @@ export default function ImageGallery({ images, productName, variants = [], selec
                 fill
                 className="object-cover object-[center_30%]"
               />
-              {selectedIndex === idx && (
+              {!colorOverride && selectedIndex === idx && (
                 <div className="absolute inset-0 bg-primary/10 pointer-events-none" />
               )}
             </button>

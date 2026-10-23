@@ -161,6 +161,41 @@ export async function placeOrder(formData: FormData): Promise<PlaceOrderResult> 
       quantity: item.quantity,
     }));
 
+    // The total the checkout page showed, against the prices now. A price or conversion
+    // rate edited since the page loaded would otherwise be charged without the customer
+    // seeing it. Worked out the way the page does, from the same caches, which product and
+    // rate edits clear. A line that can't be priced here is left for the RPC to explain.
+    const expectedTotalField = formData.get('expectedTotal');
+    if (expectedTotalField !== null) {
+      const expectedTotal = Number(expectedTotalField);
+      const productIds = [...new Set(items.map((item) => item.product_id))];
+      const [settings, products, variants] = await Promise.all([
+        getStoreSettings(),
+        getProductsByIds(productIds),
+        getVariantsByProductIds(productIds),
+      ]);
+      let currentTotal = 0;
+      let priced = true;
+      for (const item of items) {
+        const product = products.find((p: any) => p.id === item.product_id);
+        const variant = item.variant_id ? variants.find((v: any) => v.id === item.variant_id) : undefined;
+        if (!product || (item.variant_id && !variant)) {
+          priced = false;
+          break;
+        }
+        const unit =
+          Math.round(Number(product.base_usd) * settings.conversionRate) +
+          (variant ? Math.round(Number(variant.price_adjustment_usd ?? 0) * settings.conversionRate) : 0);
+        currentTotal += unit * item.quantity;
+      }
+      if (priced && Number.isFinite(expectedTotal) && currentTotal !== expectedTotal) {
+        return {
+          success: false,
+          error: `Prices have changed since you opened checkout: this order now comes to ${currentTotal.toLocaleString()} points. Check it and place it again.`,
+        };
+      }
+    }
+
     // Call the transactional RPC to place the order
     const { data: orderId, error: rpcError } = await supabase.rpc('place_points_order', {
       p_items: items,
@@ -200,6 +235,30 @@ export async function placeOrder(formData: FormData): Promise<PlaceOrderResult> 
         };
       } else if (rpcError.message.includes('This account is inactive')) {
         return { success: false, error: 'This account has been deactivated, so it cannot place orders.' };
+      } else if (rpcError.message.includes('Insufficient stock for')) {
+        // Someone else bought the last ones since the page loaded. Naming the item and what
+        // is left lets the customer fix the cart; "try again" alone never could succeed.
+        const match = rpcError.message.match(
+          /Insufficient stock for (.+?) \(variant ([^)]*)\)\. Requested \d+, available (-?\d+)/
+        );
+        if (!match) {
+          return {
+            success: false,
+            error: 'One of the items in your cart no longer has enough stock. Check your cart and try again.',
+          };
+        }
+        // The error names the variant only; the product makes it recognisable
+        const line = items.find((item) => item.variant_id === match[2]);
+        const [product] = line ? await getProductsByIds([line.product_id]) : [];
+        const label = product ? `${product.name} (${match[1]})` : match[1];
+        const left = Math.max(0, parseInt(match[3], 10));
+        return {
+          success: false,
+          error:
+            left === 0
+              ? `${label} has just sold out. Remove it from your cart to continue.`
+              : `Only ${left} of ${label} left. Lower the quantity in your cart to continue.`,
+        };
       } else {
         return { success: false, error: 'Failed to place order. Please try again.' };
       }

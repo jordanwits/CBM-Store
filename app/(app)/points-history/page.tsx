@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { fetchAllRows } from '@/lib/supabase/fetch-all';
+import { startOfLocalDay, startOfNextLocalDay } from '@/lib/dates/local-day';
 import { getJwtSubject } from '@/lib/auth/jwt';
 import { Card, CardHeader, CardContent } from 'core/components/Card';
 import { PageHeader } from 'core/components/PageHeader';
@@ -22,6 +23,7 @@ interface PointsHistoryPageProps {
     page?: string;
     startDate?: string;
     endDate?: string;
+    tz?: string;
     type?: string;
     minPoints?: string;
     maxPoints?: string;
@@ -40,6 +42,7 @@ export default async function PointsHistoryPage({ searchParams }: PointsHistoryP
   // Extract filter parameters
   const startDate = params.startDate || null;
   const endDate = params.endDate || null;
+  const tzOffset = params.tz ?? null;
   const type = (params.type as 'all' | 'earned' | 'spent') || 'all';
   const minPoints = params.minPoints ? parseInt(params.minPoints, 10) : null;
   const maxPoints = params.maxPoints ? parseInt(params.maxPoints, 10) : null;
@@ -109,8 +112,10 @@ export default async function PointsHistoryPage({ searchParams }: PointsHistoryP
     // Helper function to build base query with all filters
     const buildFilteredQuery = (query: any) => {
       // Date filtering: prioritize custom date range, then days filter
-      if (startDate) {
-        query = query.gte('created_at', new Date(startDate).toISOString());
+      // Days are the viewer's own, read with the offset their browser sent (lib/dates/local-day)
+      const dayFrom = startDate ? startOfLocalDay(startDate, tzOffset) : null;
+      if (dayFrom) {
+        query = query.gte('created_at', dayFrom.toISOString());
       } else if (daysFilter !== null) {
         if (daysFilter === 9999) {
           // All time - no date filter
@@ -121,11 +126,10 @@ export default async function PointsHistoryPage({ searchParams }: PointsHistoryP
         }
       }
       
-      if (endDate) {
-        // Include the entire end date by setting time to end of day
-        const endDateObj = new Date(endDate);
-        endDateObj.setHours(23, 59, 59, 999);
-        query = query.lte('created_at', endDateObj.toISOString());
+      // Up to the start of the next day, so the end date counts in full
+      const dayUntil = endDate ? startOfNextLocalDay(endDate, tzOffset) : null;
+      if (dayUntil) {
+        query = query.lt('created_at', dayUntil.toISOString());
       }
       
       // Transaction type filter
@@ -153,8 +157,8 @@ export default async function PointsHistoryPage({ searchParams }: PointsHistoryP
 
     // Build queries for count, totals, and paginated history. The totals are summed here, so
     // they read every row in the period rather than the first 1000.
-    const totalsRows = fetchAllRows<{ delta_points: number }>((from, to) =>
-      buildFilteredQuery(supabase.from('points_ledger').select('delta_points').eq('user_id', userId))
+    const totalsRows = fetchAllRows<{ delta_points: number; order_id: string | null }>((from, to) =>
+      buildFilteredQuery(supabase.from('points_ledger').select('delta_points, order_id').eq('user_id', userId))
         .order('id')
         .range(from, to)
     );
@@ -203,14 +207,22 @@ export default async function PointsHistoryPage({ searchParams }: PointsHistoryP
     // Calculate totals for the filtered period (from all records in period). A read that
     // failed partway is left out rather than summed as if it were complete.
     const allDeltaPoints = totalsResult.error ? [] : totalsResult.data;
-    totalEarned = allDeltaPoints
-      .filter((entry: any) => entry.delta_points > 0)
-      .reduce((sum: number, entry: any) => sum + entry.delta_points, 0) || 0;
+    // A refund is a positive row against an order: it gives spending back rather than
+    // being earned, so it comes off spent instead (never below zero, for a view filtered
+    // to positive rows only)
+    const refunded = allDeltaPoints
+      .filter((entry) => entry.delta_points > 0 && entry.order_id)
+      .reduce((sum, entry) => sum + entry.delta_points, 0);
 
-    totalSpent = Math.abs(
+    totalEarned = allDeltaPoints
+      .filter((entry) => entry.delta_points > 0 && !entry.order_id)
+      .reduce((sum, entry) => sum + entry.delta_points, 0);
+
+    totalSpent = Math.max(
+      0,
       allDeltaPoints
-        .filter((entry: any) => entry.delta_points < 0)
-        .reduce((sum: number, entry: any) => sum + entry.delta_points, 0) || 0
+        .filter((entry) => entry.delta_points < 0)
+        .reduce((sum, entry) => sum - entry.delta_points, 0) - refunded
     );
   }
 
@@ -244,6 +256,7 @@ export default async function PointsHistoryPage({ searchParams }: PointsHistoryP
     if (daysFilter !== null) params.set('days', daysFilter.toString());
     if (startDate) params.set('startDate', startDate);
     if (endDate) params.set('endDate', endDate);
+    if (tzOffset) params.set('tz', tzOffset);
     if (type !== 'all') params.set('type', type);
     if (minPoints !== null) params.set('minPoints', minPoints.toString());
     if (maxPoints !== null) params.set('maxPoints', maxPoints.toString());

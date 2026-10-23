@@ -211,12 +211,40 @@ export default function CheckoutPageClient({
       return;
     }
 
+    // What this page shows is what gets ordered. Another tab can change the stored cart while
+    // this one sits open, and ordering whatever is stored by now would charge for things the
+    // customer never saw here, so a change stops the order and the page catches up instead.
+    const quantities = (lines: Array<{ productId: string; variantId?: string; quantity: number }>) => {
+      const byLine = new Map<string, number>();
+      for (const line of lines) {
+        const key = `${line.productId}|${line.variantId ?? ''}`;
+        byLine.set(key, (byLine.get(key) ?? 0) + line.quantity);
+      }
+      return byLine;
+    };
+    const shown = quantities(cartItems);
+    const stored = quantities(getCart().items);
+    const cartChanged =
+      shown.size !== stored.size || [...shown].some(([key, quantity]) => stored.get(key) !== quantity);
+    if (cartChanged) {
+      setError('Your cart changed in another tab or window. Check the order below, then place it again.');
+      await loadCart();
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
       const formData = new FormData();
-      formData.append('cart', JSON.stringify(getCart()));
+      formData.append(
+        'cart',
+        JSON.stringify({
+          items: cartItems.map(({ productId, variantId, quantity }) => ({ productId, variantId, quantity })),
+        })
+      );
       formData.append('note', note);
+      // The server refuses the order if prices have moved since this total was shown
+      formData.append('expectedTotal', String(totalPoints));
 
       const result = await placeOrder(formData);
 
@@ -225,6 +253,9 @@ export default function CheckoutPageClient({
         router.push(`/orders/${result.orderId}`);
       } else {
         setError(result.error || 'Failed to place order. Please try again.');
+        // Stock or prices may have moved: show them as they are now, so the line at fault
+        // is marked and the total is current before the customer tries again
+        await loadCart();
       }
     } catch {
       setError('An unexpected error occurred. Please try again.');

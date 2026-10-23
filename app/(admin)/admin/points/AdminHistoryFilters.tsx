@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useState, useEffect, useTransition } from 'react';
 import { Input } from 'core/components/Input';
+import { localDayString, localOffsetParam } from '@/lib/dates/local-day';
 
 interface AdminHistoryFiltersProps {
   currentDays?: number;
@@ -76,6 +77,11 @@ export function AdminHistoryFilters({ currentDays }: AdminHistoryFiltersProps) {
       }
     });
     
+    // Dates are the viewer's own days, so the page needs their offset to read them
+    if (params.has('startDate') || params.has('endDate')) {
+      params.set('tz', localOffsetParam());
+    }
+
     // Reset to page 1 when filters change
     params.set('page', '1');
     
@@ -163,8 +169,8 @@ export function AdminHistoryFilters({ currentDays }: AdminHistoryFiltersProps) {
     
     const updates: Record<string, string | null> = {
       days: days === 9999 ? '9999' : days.toString(),
-      startDate: days === 9999 ? null : start.toISOString().split('T')[0],
-      endDate: days === 9999 ? null : today.toISOString().split('T')[0],
+      startDate: days === 9999 ? null : localDayString(start),
+      endDate: days === 9999 ? null : localDayString(today),
     };
     
     navigateWithScrollPreservation(buildFilterUrl(updates));
@@ -278,7 +284,7 @@ export function AdminHistoryFilters({ currentDays }: AdminHistoryFiltersProps) {
               label="Start Date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              max={endDate || new Date().toISOString().split('T')[0]}
+              max={endDate || localDayString()}
               disabled={isPending}
             />
             <Input
@@ -287,7 +293,7 @@ export function AdminHistoryFilters({ currentDays }: AdminHistoryFiltersProps) {
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
               min={startDate}
-              max={new Date().toISOString().split('T')[0]}
+              max={localDayString()}
               disabled={isPending}
             />
             <button
