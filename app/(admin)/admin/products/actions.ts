@@ -180,6 +180,9 @@ interface VariantData {
   price_adjustment_usd?: number;
   // null clears the count back to untracked/unlimited; undefined leaves it as-is
   inventory_count?: number | null;
+  // The count the editor started from. When given with inventory_count, the new count only
+  // lands if the stored one still matches it.
+  expected_inventory_count?: number | null;
   image_url?: string;
 }
 
@@ -246,8 +249,8 @@ export async function updateVariant(variantId: string, data: Partial<VariantData
   }
 
   const { supabase } = await requireAdmin();
-  
-  const { error } = await supabase
+
+  let query = supabase
     .from('product_variants')
     .update({
       ...(data.name && { name: data.name }),
@@ -259,28 +262,54 @@ export async function updateVariant(variantId: string, data: Partial<VariantData
       ...(data.image_url !== undefined && { image_url: data.image_url || null }),
     })
     .eq('id', variantId);
-  
+
+  // Orders, refunds and made-to-order lines marked ready all move the count while the edit
+  // page sits open, so a new count only lands if the stored one is still what the editor
+  // showed. Writing back the old figure would quietly undo them.
+  const guardStock =
+    data.inventory_count !== undefined && data.expected_inventory_count !== undefined;
+  if (guardStock) {
+    query =
+      data.expected_inventory_count === null
+        ? query.is('inventory_count', null)
+        : query.eq('inventory_count', data.expected_inventory_count);
+  }
+
+  const { data: updated, error } = await query.select('product_id');
+
   if (error) {
     console.error('Error updating variant:', error);
     return { success: false, error: 'Failed to update variant' };
   }
-  
-  // Get product_id for revalidation
-  const { data: variant } = await supabase
-    .from('product_variants')
-    .select('product_id')
-    .eq('id', variantId)
-    .single();
-  
-  if (variant) {
-    // Revalidate cache tags and paths
-    revalidateTag('product-variants');
-    revalidateTag('filter-metadata');
-    revalidatePath('/admin/products');
-    revalidatePath('/dashboard');
-    revalidatePath(`/product/${variant.product_id}`);
+
+  const variant = updated?.[0];
+
+  if (!variant) {
+    if (guardStock) {
+      const { data: current } = await supabase
+        .from('product_variants')
+        .select('inventory_count')
+        .eq('id', variantId)
+        .maybeSingle();
+
+      if (current) {
+        const now = current.inventory_count === null ? 'untracked' : current.inventory_count;
+        return {
+          success: false,
+          error: `The stock count changed while you were editing (it is now ${now}), so nothing was saved. Reload the page and enter the new count again.`,
+        };
+      }
+    }
+    return { success: false, error: 'Variant not found' };
   }
-  
+
+  // Revalidate cache tags and paths
+  revalidateTag('product-variants');
+  revalidateTag('filter-metadata');
+  revalidatePath('/admin/products');
+  revalidatePath('/dashboard');
+  revalidatePath(`/product/${variant.product_id}`);
+
   return { success: true };
 }
 

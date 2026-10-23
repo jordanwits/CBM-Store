@@ -33,6 +33,8 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
   const [isAdding, setIsAdding] = useState(false);
   const [showMatrix, setShowMatrix] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  // The stock count shown when editing began, so a save can tell whether it was changed
+  const [loadedInventory, setLoadedInventory] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   
@@ -117,6 +119,7 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
       inventory_count: variant.inventory_count?.toString() || '',
       image_url: variant.image_url || '',
     });
+    setLoadedInventory(variant.inventory_count ?? null);
     setEditingId(variant.id);
     setIsAdding(false);
   };
@@ -160,6 +163,10 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
     setLoading(true);
     setMessage(null);
 
+    const inventoryCount = formData.inventory_count.trim() === ''
+      ? null
+      : parseInt(formData.inventory_count);
+
     // Both dimensions go on every save — sending only the one that changed leaves a
     // stale value behind when a variant is edited from, say, colored to size-only
     const variantData: any = {
@@ -170,10 +177,18 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
       color: variantType === 'custom' ? '' : formData.color.trim(),
       price_adjustment_usd: parseFloat(formData.price_adjustment_usd) || 0,
       // null (not undefined) so clearing the field actually saves as untracked
-      inventory_count: formData.inventory_count.trim() === ''
-        ? null
-        : parseInt(formData.inventory_count),
+      inventory_count: inventoryCount,
     };
+
+    // Stock is unlike the other fields: orders keep moving it while this form is open. Left
+    // alone, it is not sent at all; changed, it only saves if nothing else moved it first.
+    if (editingId) {
+      if (inventoryCount === loadedInventory) {
+        delete variantData.inventory_count;
+      } else {
+        variantData.expected_inventory_count = loadedInventory;
+      }
+    }
 
     if (canShowImage) {
       variantData.image_url = formData.image_url.trim();
