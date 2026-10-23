@@ -96,16 +96,8 @@ CREATE POLICY "Users can read their own order items"
     )
   );
 
-CREATE POLICY "Users can create order items for their orders"
-  ON order_items FOR INSERT
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM orders
-      WHERE orders.id = order_items.order_id
-      AND orders.user_id = auth.uid()
-      LIMIT 1  -- Optimization: stop at first match
-    )
-  );
+-- No customer INSERT policy on order_items: orders are only written by place_points_order,
+-- and migration 042 removed this one because it let customers add lines to their own orders.
 
 -- Add index to support the order_items RLS policy
 CREATE INDEX IF NOT EXISTS idx_orders_id_user_id 
