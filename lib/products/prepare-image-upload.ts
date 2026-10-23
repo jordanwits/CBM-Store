@@ -18,6 +18,46 @@ const QUALITY = 0.82;
 const PASS_THROUGH_TYPES = new Set(['image/gif', 'image/svg+xml']);
 const WEB_SAFE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
+// The store shows images as squares about 420px across (twice that on high-resolution screens),
+// cropped to the shorter side, so a shorter side under this gets stretched and looks soft.
+const MIN_SHARP_EDGE = 800;
+
+async function measure(file: File): Promise<{ width: number; height: number } | null> {
+  if (!file.type.startsWith('image/') || file.type === 'image/svg+xml') return null;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const size = { width: bitmap.width, height: bitmap.height };
+    bitmap.close();
+    return size;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Warn before uploading images too small to look sharp on the store, and let the admin decide.
+ * Returns the files to go ahead with: all of them, or without the small ones if they cancel.
+ */
+export async function confirmSmallImages(files: File[]): Promise<File[]> {
+  const small: { file: File; label: string }[] = [];
+  for (const file of files) {
+    const size = await measure(file);
+    if (size && Math.min(size.width, size.height) < MIN_SHARP_EDGE) {
+      small.push({ file, label: `${file.name} (${size.width} × ${size.height} pixels)` });
+    }
+  }
+  if (small.length === 0) return files;
+
+  const advice = `Images at least ${MIN_SHARP_EDGE} pixels on each side look sharp.`;
+  const message = small.length === 1
+    ? `${small[0].label} is small, so it will look blurry on the store. ${advice}\n\nUpload it anyway?`
+    : `These images are small, so they will look blurry on the store:\n\n${small.map(s => `• ${s.label}`).join('\n')}\n\n${advice}\n\nOK uploads them anyway. Cancel leaves them out.`;
+  if (window.confirm(message)) return files;
+
+  const leftOut = new Set(small.map(s => s.file));
+  return files.filter(file => !leftOut.has(file));
+}
+
 function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality?: number): Promise<Blob | null> {
   return new Promise(resolve => canvas.toBlob(resolve, type, quality));
 }

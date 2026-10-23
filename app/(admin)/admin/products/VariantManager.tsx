@@ -5,7 +5,7 @@ import { Button } from 'core/components/Button';
 import { Input } from 'core/components/Input';
 import { Card, CardContent } from 'core/components/Card';
 import { createVariant, updateVariant, deleteVariant, uploadProductImage } from './actions';
-import { prepareImageForUpload } from '@/lib/products/prepare-image-upload';
+import { confirmSmallImages, prepareImageForUpload } from '@/lib/products/prepare-image-upload';
 import { VariantMatrixBuilder } from './VariantMatrixBuilder';
 import { sizeOptions, colorOptions, CUSTOM_VALUE } from './variantOptions';
 
@@ -122,8 +122,13 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const input = e.target;
+    const file = input.files?.[0];
     if (!file) return;
+    if ((await confirmSmallImages([file])).length === 0) {
+      input.value = '';
+      return;
+    }
 
     setLoading(true);
     const formDataUpload = new FormData();

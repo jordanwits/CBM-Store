@@ -6,7 +6,7 @@ import { Button } from 'core/components/Button';
 import { Input } from 'core/components/Input';
 import { Card, CardContent } from 'core/components/Card';
 import { createProduct, updateProduct, uploadProductImage } from './actions';
-import { prepareImageForUpload } from '@/lib/products/prepare-image-upload';
+import { confirmSmallImages, prepareImageForUpload } from '@/lib/products/prepare-image-upload';
 import { VariantCreationList } from './VariantCreationList';
 
 interface ProductFormProps {
@@ -74,14 +74,19 @@ export function ProductForm({ mode, productId, initialData, isDevMode }: Product
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
+    const toUpload = await confirmSmallImages(Array.from(files));
+    if (toUpload.length === 0) {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
     setUploadingImage(true);
     setUploadMessage(null);
 
     try {
       const uploadedUrls: string[] = [];
       
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+      for (const file of toUpload) {
         const formData = new FormData();
         formData.append('file', await prepareImageForUpload(file));
         

@@ -5,7 +5,7 @@ import { Button } from 'core/components/Button';
 import { Input } from 'core/components/Input';
 import { Card, CardContent } from 'core/components/Card';
 import { uploadProductImage } from './actions';
-import { prepareImageForUpload } from '@/lib/products/prepare-image-upload';
+import { confirmSmallImages, prepareImageForUpload } from '@/lib/products/prepare-image-upload';
 import { sizeOptions, colorOptions } from './variantOptions';
 
 interface Combination {
@@ -330,9 +330,15 @@ export function VariantMatrixBuilder({ onSave, onCancel, isDevMode, disabled }: 
                       <input
                         type="file"
                         accept="image/*"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleColorImageUpload(color, file);
+                        onChange={async (e) => {
+                          const input = e.target;
+                          const file = input.files?.[0];
+                          if (!file) return;
+                          if ((await confirmSmallImages([file])).length === 0) {
+                            input.value = '';
+                            return;
+                          }
+                          handleColorImageUpload(color, file);
                         }}
                         disabled={isDevMode || disabled || uploadingColor === color}
                         className="block w-full text-sm text-gray-900 border border-gray-300 rounded-md cursor-pointer bg-white focus:outline-none disabled:bg-gray-100 disabled:cursor-not-allowed file:mr-4 file:py-1.5 file:px-3 file:rounded-l-md file:border-0 file:text-sm file:font-medium file:bg-gray-900 file:text-white hover:file:bg-gray-800"
