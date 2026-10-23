@@ -6,6 +6,7 @@ import { Button } from 'core/components/Button';
 import { Input } from 'core/components/Input';
 import { Card, CardContent } from 'core/components/Card';
 import { createProduct, updateProduct, uploadProductImage } from './actions';
+import { prepareImageForUpload } from '@/lib/products/prepare-image-upload';
 import { VariantCreationList } from './VariantCreationList';
 
 interface ProductFormProps {
@@ -82,7 +83,7 @@ export function ProductForm({ mode, productId, initialData, isDevMode }: Product
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         const formData = new FormData();
-        formData.append('file', file);
+        formData.append('file', await prepareImageForUpload(file));
         
         const result = await uploadProductImage(formData);
         
@@ -323,7 +324,7 @@ export function ProductForm({ mode, productId, initialData, isDevMode }: Product
                 {uploadMessage}
               </p>
             )}
-            <p className="text-xs text-gray-600 mt-1">Images will be uploaded to Supabase Storage (max 10MB per image)</p>
+            <p className="text-xs text-gray-600 mt-1">Large photos are shrunk automatically before they upload</p>
           </div>
           
           <div>

@@ -5,6 +5,10 @@ const nextConfig = {
   outputFileTracingRoot: path.join(__dirname),
   transpilePackages: ['core'],
   images: {
+    // Serve images as stored instead of through Vercel's optimizer, which is metered: once
+    // the plan's allowance ran out it answered new images with 402 and they showed broken.
+    // Admin uploads are shrunk in the browser instead (lib/products/prepare-image-upload.ts).
+    unoptimized: true,
     remotePatterns: [
       {
         protocol: 'https',

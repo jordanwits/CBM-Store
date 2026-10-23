@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Button } from 'core/components/Button';
 import { Input } from 'core/components/Input';
 import { uploadProductImage } from './actions';
+import { prepareImageForUpload } from '@/lib/products/prepare-image-upload';
 import { VariantMatrixBuilder } from './VariantMatrixBuilder';
 import { sizeOptions, colorOptions, CUSTOM_VALUE } from './variantOptions';
 
@@ -80,7 +81,7 @@ export function VariantCreationList({ variants, onAdd, onRemove, isDevMode, disa
     setUploadMessage(null);
     
     const formDataUpload = new FormData();
-    formDataUpload.append('file', file);
+    formDataUpload.append('file', await prepareImageForUpload(file));
 
     const result = await uploadProductImage(formDataUpload);
     setUploading(false);

@@ -5,6 +5,7 @@ import { Button } from 'core/components/Button';
 import { Input } from 'core/components/Input';
 import { Card, CardContent } from 'core/components/Card';
 import { createVariant, updateVariant, deleteVariant, uploadProductImage } from './actions';
+import { prepareImageForUpload } from '@/lib/products/prepare-image-upload';
 import { VariantMatrixBuilder } from './VariantMatrixBuilder';
 import { sizeOptions, colorOptions, CUSTOM_VALUE } from './variantOptions';
 
@@ -126,7 +127,7 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
 
     setLoading(true);
     const formDataUpload = new FormData();
-    formDataUpload.append('file', file);
+    formDataUpload.append('file', await prepareImageForUpload(file));
 
     const result = await uploadProductImage(formDataUpload);
     setLoading(false);

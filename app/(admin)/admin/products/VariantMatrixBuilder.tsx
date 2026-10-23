@@ -5,6 +5,7 @@ import { Button } from 'core/components/Button';
 import { Input } from 'core/components/Input';
 import { Card, CardContent } from 'core/components/Card';
 import { uploadProductImage } from './actions';
+import { prepareImageForUpload } from '@/lib/products/prepare-image-upload';
 import { sizeOptions, colorOptions } from './variantOptions';
 
 interface Combination {
@@ -90,7 +91,7 @@ export function VariantMatrixBuilder({ onSave, onCancel, isDevMode, disabled }: 
   const handleColorImageUpload = async (color: string, file: File) => {
     setUploadingColor(color);
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('file', await prepareImageForUpload(file));
     
     const result = await uploadProductImage(formData);
     setUploadingColor(null);
