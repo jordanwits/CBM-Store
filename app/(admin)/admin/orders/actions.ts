@@ -3,7 +3,7 @@
 import { requireAdmin } from '@/lib/auth/require-admin';
 import { revalidatePath, revalidateTag } from 'next/cache';
 import { after } from 'next/server';
-import { sendEmail, getAdminEmails, deliverableEmail } from '@/lib/email/resend';
+import { sendEmail, getAdminEmails, deliverableEmail, isEmailConfigured } from '@/lib/email/resend';
 import {
   customerOrderStatusEmail,
   adminOrderStatusEmail,
@@ -46,6 +46,8 @@ interface UpdateOrderStatusResult {
    * never tells staff someone was emailed when nobody was.
    */
   customerEmailed?: boolean;
+  /** Set when the customer would have been emailed but sending is not set up at all */
+  emailNotConfigured?: boolean;
 }
 
 export async function updateOrderStatus(
@@ -140,7 +142,10 @@ export async function updateOrderStatus(
   // moved". A phone-only customer has no real address, so there is no one to email.
   const notifyCustomer = data.notifyCustomer ?? statusChanged;
   const customerEmail = deliverableEmail((existingOrder as any)?.profiles?.email);
-  const customerEmailed = Boolean(customerEmail && notifyCustomer);
+  // With email not set up, sendEmail skips quietly after the response has gone, so the
+  // editor used to report "the customer has been emailed" when nothing was sent
+  const emailNotConfigured = Boolean(customerEmail && notifyCustomer) && !isEmailConfigured();
+  const customerEmailed = Boolean(customerEmail && notifyCustomer) && !emailNotConfigured;
 
   // Send email notifications (failures should not block status update)
   try {
@@ -185,7 +190,7 @@ export async function updateOrderStatus(
     console.error('Error sending status update emails:', emailError);
   }
 
-  return { success: true, customerEmailed };
+  return { success: true, customerEmailed, emailNotConfigured };
 }
 
 interface SendPickupNoticeData {
@@ -262,7 +267,10 @@ export async function sendPickupNotice(
     quantity: item.quantity,
   });
 
-  const readyItems = allItems.filter((item) => readyIds.has(item.id)).map(toNoticeItem);
+  // A line the customer has already collected is never "ready to collect", ticked or not
+  const readyItems = allItems
+    .filter((item) => readyIds.has(item.id) && item.fulfillment_status !== 'picked_up')
+    .map(toNoticeItem);
 
   // A line the customer already collected is not "still coming" — without this, the notice
   // for a late made-to-order item would tell them the things in their hands are outstanding.

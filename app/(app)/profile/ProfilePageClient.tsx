@@ -44,7 +44,9 @@ export default function ProfilePageClient({
 
     startTransition(async () => {
       const result: UpdateProfileResult = await updateProfile({
-        fullName: fullName.trim() || undefined,
+        // An empty string rather than undefined, which the action skipped: emptying the name
+        // used to fail with "No updates provided". It stores an empty name as cleared.
+        fullName: fullName.trim(),
       });
 
       if (result.success) {

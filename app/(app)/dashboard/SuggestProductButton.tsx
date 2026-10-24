@@ -29,8 +29,16 @@ export function SuggestProductButton({ isDevMode, className = '' }: SuggestProdu
     e.preventDefault();
     setError(null);
     setLoading(true);
-    const result = await submitProductSuggestion(text);
-    setLoading(false);
+    // A thrown request (a deploy since the page loaded, say) used to leave the dialog stuck
+    // with both close buttons disabled
+    let result: Awaited<ReturnType<typeof submitProductSuggestion>>;
+    try {
+      result = await submitProductSuggestion(text);
+    } catch {
+      result = { success: false, error: 'Could not send your suggestion. Please try again.' };
+    } finally {
+      setLoading(false);
+    }
     if (!result.success) {
       setError(result.error || 'Something went wrong.');
       return;

@@ -107,6 +107,11 @@ export async function updateProduct(productId: string, data: ProductData) {
   const { supabase } = await requireAdmin();
   
   // Validate required fields
+  const negativeBase = data.base_usd ? await negativePriceError(supabase, productId, { baseUsd: data.base_usd }) : null;
+  if (negativeBase) {
+    return { success: false, error: negativeBase };
+  }
+
   if (!data.name || !data.description || !data.base_usd || data.base_usd <= 0) {
     return { success: false, error: 'Name, description, and valid base price are required' };
   }
@@ -191,6 +196,38 @@ interface VariantData {
   image_url?: string;
 }
 
+/**
+ * Why a product's price and its variants' adjustments would put a variant below zero, or
+ * null. place_points_order adds a negative line into the order total, so a variant priced
+ * below nothing would discount the rest of the cart.
+ */
+async function negativePriceError(
+  supabase: Awaited<ReturnType<typeof requireAdmin>>['supabase'],
+  productId: string,
+  change: { baseUsd?: number; adjustmentUsd?: number }
+): Promise<string | null> {
+  let base = change.baseUsd;
+  if (base === undefined) {
+    const { data: product } = await supabase.from('products').select('base_usd').eq('id', productId).maybeSingle();
+    base = Number(product?.base_usd ?? 0);
+  }
+
+  let lowest = change.adjustmentUsd;
+  if (lowest === undefined) {
+    const { data: variants } = await supabase
+      .from('product_variants')
+      .select('price_adjustment_usd')
+      .eq('product_id', productId)
+      .eq('active', true);
+    lowest = Math.min(0, ...(variants ?? []).map((v: any) => Number(v.price_adjustment_usd ?? 0)));
+  }
+
+  if (base + lowest >= 0) return null;
+  return change.adjustmentUsd !== undefined
+    ? `A price adjustment of ${lowest.toFixed(2)} would take this variant below zero: the product's base price is ${base.toFixed(2)}.`
+    : `A base price of ${base.toFixed(2)} would put a variant below zero: one has an adjustment of ${lowest.toFixed(2)}. Change that variant first.`;
+}
+
 export async function createVariant(data: VariantData) {
   // Check if using placeholder Supabase (dev mode)
   const isDevMode = !process.env.NEXT_PUBLIC_SUPABASE_URL || 
@@ -225,6 +262,11 @@ export async function createVariant(data: VariantData) {
   const conflict = variantConflict(siblings ?? [], data);
   if (conflict) {
     return { success: false, error: conflict };
+  }
+
+  if ((data.price_adjustment_usd ?? 0) < 0) {
+    const negative = await negativePriceError(supabase, data.product_id, { adjustmentUsd: data.price_adjustment_usd });
+    if (negative) return { success: false, error: negative };
   }
 
   const { data: variant, error } = await supabase
@@ -309,6 +351,11 @@ export async function updateVariant(variantId: string, data: Partial<VariantData
     return { success: false, error: conflict };
   }
 
+  if (data.price_adjustment_usd !== undefined && data.price_adjustment_usd < 0) {
+    const negative = await negativePriceError(supabase, current.product_id, { adjustmentUsd: data.price_adjustment_usd });
+    if (negative) return { success: false, error: negative };
+  }
+
   let query = supabase
     .from('product_variants')
     .update({
@@ -385,7 +432,30 @@ export async function setVariantActive(variantId: string, active: boolean) {
   }
 
   const { supabase } = await requireAdmin();
-  
+
+  // Coming back into the store is the same as being added: it mustn't repeat a variant the
+  // product now has, or leave others unchoosable
+  if (active) {
+    const { data: current } = await supabase
+      .from('product_variants')
+      .select('product_id, name, size, color')
+      .eq('id', variantId)
+      .maybeSingle();
+    if (!current) {
+      return { success: false, error: 'Variant not found' };
+    }
+    const { data: siblings } = await supabase
+      .from('product_variants')
+      .select('name, size, color')
+      .eq('product_id', current.product_id)
+      .eq('active', true)
+      .neq('id', variantId);
+    const conflict = variantConflict(siblings ?? [], current);
+    if (conflict) {
+      return { success: false, error: conflict };
+    }
+  }
+
   const { error } = await supabase
     .from('product_variants')
     .update({ active })
@@ -435,7 +505,32 @@ export async function deleteVariant(variantId: string) {
     .select('product_id')
     .eq('id', variantId)
     .single();
-  
+
+  // Order lines point at their variant, so one that has been ordered can't be deleted
+  // without breaking order history. It used to just fail; it is hidden from the store
+  // instead, which takes it off sale while the orders keep it.
+  const { count: orderedCount } = await supabase
+    .from('order_items')
+    .select('id', { count: 'exact', head: true })
+    .eq('variant_id', variantId);
+
+  if ((orderedCount ?? 0) > 0) {
+    const { error: hideError } = await supabase
+      .from('product_variants')
+      .update({ active: false })
+      .eq('id', variantId);
+    if (hideError) {
+      console.error('Error hiding variant:', hideError);
+      return { success: false, error: 'Failed to remove variant' };
+    }
+    revalidateTag('product-variants');
+    revalidateTag('filter-metadata');
+    revalidatePath('/admin/products');
+    revalidatePath('/dashboard');
+    if (variant) revalidatePath(`/product/${variant.product_id}`);
+    return { success: true, hidden: true };
+  }
+
   const { error } = await supabase
     .from('product_variants')
     .delete()

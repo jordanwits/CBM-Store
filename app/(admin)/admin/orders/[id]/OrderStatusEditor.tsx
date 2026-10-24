@@ -65,6 +65,8 @@ export function OrderStatusEditor({
         // real address, so asking for one is not the same as sending one
         text: result.customerEmailed
           ? 'Order updated and the customer has been emailed.'
+          : result.emailNotConfigured
+            ? 'Order updated, but email is not set up for this store (RESEND_API_KEY and FROM_EMAIL), so the customer was not emailed.'
           : notifyCustomer
             ? 'Order updated. This customer has no email address on file, so they were not emailed.'
             : 'Order updated. No email was sent to the customer.',

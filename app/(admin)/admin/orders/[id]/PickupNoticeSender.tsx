@@ -146,7 +146,8 @@ export function PickupNoticeSender({ orderId, lines, isDevMode }: PickupNoticeSe
                   type="checkbox"
                   checked={readyIds.has(line.id)}
                   onChange={() => toggle(line.id)}
-                  disabled={loading}
+                  // Already collected: nothing to tell the customer to come in for
+                  disabled={loading || line.fulfillmentStatus === 'picked_up'}
                   className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
                 <span className="text-sm">

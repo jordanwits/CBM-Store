@@ -104,7 +104,15 @@ export default function CheckoutPageClient({
       products = mockProducts;
       variants = mockVariants;
     } else {
-      const data = await getCheckoutData(cart.items);
+      // A failed load used to leave the skeleton up for good, with no message
+      let data: Awaited<ReturnType<typeof getCheckoutData>>;
+      try {
+        data = await getCheckoutData(cart.items);
+      } catch {
+        setError('Could not load your order. Refresh the page to try again.');
+        setIsLoading(false);
+        return;
+      }
       products = data.products;
       variants = data.variants;
       conversionRate = data.conversionRate;

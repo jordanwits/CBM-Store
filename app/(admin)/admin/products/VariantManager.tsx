@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Button } from 'core/components/Button';
 import { Input } from 'core/components/Input';
 import { Card, CardContent } from 'core/components/Card';
-import { createVariant, updateVariant, deleteVariant, uploadProductImage } from './actions';
+import { createVariant, updateVariant, deleteVariant, setVariantActive, uploadProductImage } from './actions';
 import { confirmSmallImages, prepareImageForUpload } from '@/lib/products/prepare-image-upload';
 import { VariantMatrixBuilder } from './VariantMatrixBuilder';
 import { sizeOptions, colorOptions, CUSTOM_VALUE } from './variantOptions';
@@ -137,7 +137,14 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
     const formDataUpload = new FormData();
     formDataUpload.append('file', await prepareImageForUpload(file));
 
-    const result = await uploadProductImage(formDataUpload);
+    // A failed request (often a file over the host's upload limit) used to leave the form
+    // stuck with even Cancel disabled
+    let result: Awaited<ReturnType<typeof uploadProductImage>>;
+    try {
+      result = await uploadProductImage(formDataUpload);
+    } catch {
+      result = { success: false, error: 'The upload failed. The image may be too large; try a smaller one.' };
+    }
     setLoading(false);
 
     if (result.success && result.url) {
@@ -172,7 +179,8 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
     const variantData: any = {
       product_id: productId,
       name: derivedName,
-      sku: formData.sku.trim() || undefined,
+      // An empty string, not undefined, so clearing the box clears the SKU (stored as null)
+      sku: formData.sku.trim(),
       size: variantType === 'custom' ? '' : formData.size.trim(),
       color: variantType === 'custom' ? '' : formData.color.trim(),
       price_adjustment_usd: parseFloat(formData.price_adjustment_usd) || 0,
@@ -222,11 +230,28 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
     setLoading(false);
 
     if (result.success) {
-      setMessage({ type: 'success', text: 'Variant deleted successfully!' });
+      setMessage({
+        type: 'success',
+        text: 'hidden' in result && result.hidden
+          ? 'This variant has been ordered, so it was hidden from the store rather than deleted.'
+          : 'Variant deleted successfully!',
+      });
       setTimeout(() => setMessage(null), 3000);
       window.location.reload();
     } else {
       setMessage({ type: 'error', text: result.error || 'Failed to delete variant' });
+    }
+  };
+
+  const handleShowAgain = async (variantId: string) => {
+    setLoading(true);
+    const result = await setVariantActive(variantId, true);
+    setLoading(false);
+
+    if (result.success) {
+      window.location.reload();
+    } else {
+      setMessage({ type: 'error', text: result.error || 'Failed to show the variant again' });
     }
   };
 
@@ -337,7 +362,14 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
                 className="flex items-center justify-between p-3 bg-gray-50 rounded-md border border-gray-200"
               >
                 <div className="flex-1">
-                  <p className="font-medium text-gray-900">{variant.name}</p>
+                  <p className="font-medium text-gray-900">
+                    {variant.name}
+                    {!variant.active && (
+                      <span className="ml-2 inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-800 align-middle">
+                        Hidden from store
+                      </span>
+                    )}
+                  </p>
                   <div className="flex gap-4 text-sm text-gray-600 mt-1">
                     {variant.sku && <span>SKU: {variant.sku}</span>}
                     {variant.size && <span>Size: {variant.size}</span>}
@@ -351,6 +383,16 @@ export function VariantManager({ productId, initialVariants, isDevMode, disabled
                   </div>
                 </div>
                 <div className="flex gap-2">
+                  {!variant.active && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleShowAgain(variant.id)}
+                      disabled={isDevMode || disabled || loading}
+                    >
+                      Show again
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"

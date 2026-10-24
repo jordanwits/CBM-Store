@@ -29,6 +29,15 @@ export function deliverableEmail(email: string | null | undefined): string | nul
   return trimmed;
 }
 
+/**
+ * Whether emails can go out at all. Without both settings sendEmail skips every send
+ * quietly, so anything that tells staff "the customer has been emailed" before the send has
+ * happened (it runs after the response) checks this first.
+ */
+export function isEmailConfigured(): boolean {
+  return Boolean(process.env.RESEND_API_KEY && process.env.FROM_EMAIL);
+}
+
 export async function sendEmail(params: SendEmailParams): Promise<SendEmailResult> {
   // Backstop for any caller that did not check: never hand Resend a placeholder address.
   // A list (the admin inboxes) keeps its real addresses; with none left, nothing is sent.

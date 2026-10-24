@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Card, CardHeader, CardContent } from 'core/components/Card';
 import { PageHeader } from 'core/components/PageHeader';
+import { Alert } from 'core/components/Alert';
 import { EmptyState } from 'core/components/EmptyState';
 import { Skeleton } from 'core/components/Skeleton';
 import { BackButton } from 'core/components/BackButton';
@@ -77,6 +78,7 @@ const mockVariants = [
 
 export default function CartPageClient({ isDevMode }: CartPageClientProps) {
   const [cartItems, setCartItems] = useState<CartItemWithDetails[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [universalBalance, setUniversalBalance] = useState(0);
   const [restrictedBalance, setRestrictedBalance] = useState(0);
   /** When false (guest / no session), spend split is still shown using $0 buckets but checkout is not gated on balance. */
@@ -104,10 +106,20 @@ export default function CartPageClient({ isDevMode }: CartPageClientProps) {
       setRestrictedBalance(500);
       setCanCheckAffordability(true);
     } else {
-      const [data, balances] = await Promise.all([
-        getCartProductData(cart.items),
-        getCartBalances(),
-      ]);
+      // A failed load used to leave the skeleton up for good, with no message
+      let data: Awaited<ReturnType<typeof getCartProductData>>;
+      let balances: Awaited<ReturnType<typeof getCartBalances>>;
+      try {
+        [data, balances] = await Promise.all([
+          getCartProductData(cart.items),
+          getCartBalances(),
+        ]);
+      } catch {
+        setLoadError('Could not load your cart. Refresh the page to try again.');
+        setIsLoading(false);
+        return;
+      }
+      setLoadError(null);
       products = data.products;
       variants = data.variants;
       conversionRate = data.conversionRate;
@@ -196,6 +208,15 @@ export default function CartPageClient({ isDevMode }: CartPageClientProps) {
     universalBalance
   );
   const affordanceOk = !canCheckAffordability || spendPlan.canAfford;
+
+  if (loadError) {
+    return (
+      <div>
+        <PageHeader title="Shopping Cart" />
+        <Alert variant="error">{loadError}</Alert>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (

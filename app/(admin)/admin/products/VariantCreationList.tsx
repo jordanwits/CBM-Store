@@ -111,7 +111,13 @@ export function VariantCreationList({ variants, onAdd, onRemove, isDevMode, disa
     const formDataUpload = new FormData();
     formDataUpload.append('file', await prepareImageForUpload(file));
 
-    const result = await uploadProductImage(formDataUpload);
+    // A failed request (often a file over the host's upload limit) used to leave it uploading
+    let result: Awaited<ReturnType<typeof uploadProductImage>>;
+    try {
+      result = await uploadProductImage(formDataUpload);
+    } catch {
+      result = { success: false, error: 'The upload failed. The image may be too large; try a smaller one.' };
+    }
     setUploading(false);
 
     if (result.success && result.url) {

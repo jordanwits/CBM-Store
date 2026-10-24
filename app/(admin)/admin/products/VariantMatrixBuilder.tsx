@@ -93,7 +93,13 @@ export function VariantMatrixBuilder({ onSave, onCancel, isDevMode, disabled }: 
     const formData = new FormData();
     formData.append('file', await prepareImageForUpload(file));
     
-    const result = await uploadProductImage(formData);
+    // A failed request used to leave this colour uploading for good
+    let result: Awaited<ReturnType<typeof uploadProductImage>>;
+    try {
+      result = await uploadProductImage(formData);
+    } catch {
+      result = { success: false, error: 'The upload failed. The image may be too large; try a smaller one.' };
+    }
     setUploadingColor(null);
     
     if (result.success && result.url) {
@@ -445,7 +451,7 @@ export function VariantMatrixBuilder({ onSave, onCancel, isDevMode, disabled }: 
                   <td className="px-4 py-3">
                     <input
                       type="number"
-                      value={combo.inventory_count || ''}
+                      value={combo.inventory_count ?? ''}
                       onChange={(e) => updateCombination(index, 'inventory_count', e.target.value ? parseInt(e.target.value) : undefined)}
                       disabled={disabled}
                       placeholder="Unlimited"
