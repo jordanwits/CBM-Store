@@ -168,6 +168,26 @@ export async function deleteUser(input: {
     };
   }
 
+  // A deleted order sits in the bin until restored, and restoring needs the customer's
+  // account. Deleting the account would also drop the points history those orders refer to.
+  const { data: binned, error: binError } = await supabase
+    .from('deleted_orders')
+    .select('order_id')
+    .eq('order_data->>user_id', input.userId)
+    .limit(1);
+
+  if (binError) {
+    console.error('Error checking deleted orders:', binError);
+    return { success: false, error: 'Failed to check user history' };
+  }
+
+  if (binned && binned.length > 0) {
+    return {
+      success: false,
+      error: 'Cannot delete user with orders in the deleted orders bin. Consider deactivating instead.',
+    };
+  }
+
   // Delete from auth.users (this will cascade to profiles via trigger)
   const { error: authError } = await supabase.auth.admin.deleteUser(input.userId);
 

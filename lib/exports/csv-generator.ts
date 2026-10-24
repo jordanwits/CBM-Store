@@ -14,7 +14,14 @@ function escapeCsvField(value: any): string {
     return '';
   }
   
-  const strValue = String(value);
+  let strValue = String(value);
+
+  // Spreadsheets run a cell starting with = + - @ (or a tab or return) as a formula, so a
+  // customer could put one in their name or a note. A leading apostrophe keeps it as text.
+  // Numbers and phone numbers (-500, +1 555 123 4567) carry no formula and are left alone.
+  if (/^[=+\-@\t\r]/.test(strValue) && !/^[+-]?[\d\s().,-]+$/.test(strValue)) {
+    strValue = `'${strValue}`;
+  }
   
   // If value contains comma, quote, or newline, wrap in quotes and escape internal quotes
   if (strValue.includes(',') || strValue.includes('"') || strValue.includes('\n') || strValue.includes('\r')) {
