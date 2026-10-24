@@ -7,12 +7,15 @@ import { Button } from 'core/components/Button';
 import { Card, CardHeader, CardContent } from 'core/components/Card';
 import { Alert } from 'core/components/Alert';
 import { updateProfile, UpdateProfileResult } from './actions';
+import { isReservedPhoneLoginEmail } from '@/lib/auth/phone';
+import { formatStoredPhoneForDisplay } from 'core/lib/phone-format';
 
 interface ProfilePageClientProps {
   isDevMode: boolean;
   initialProfile: {
     full_name: string | null;
     email: string;
+    phone?: string | null;
   } | null;
 }
 
@@ -25,6 +28,10 @@ export default function ProfilePageClient({
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const [fullName, setFullName] = useState(initialProfile?.full_name || '');
+
+  // A phone account signs in through a reserved placeholder address, which is not theirs to
+  // see; they are shown the number they sign in with instead
+  const signsInByPhone = !!initialProfile?.email && isReservedPhoneLoginEmail(initialProfile.email);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -71,16 +78,22 @@ export default function ProfilePageClient({
           <CardContent className="space-y-4">
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                Email
+                {signsInByPhone ? 'Phone' : 'Email'}
               </label>
               <Input
                 id="email"
-                type="email"
-                value={initialProfile.email}
+                type={signsInByPhone ? 'tel' : 'email'}
+                value={
+                  signsInByPhone
+                    ? formatStoredPhoneForDisplay(initialProfile.phone ?? '')
+                    : initialProfile.email
+                }
                 disabled
                 className="bg-gray-100"
               />
-              <p className="mt-1 text-xs text-gray-500">Email cannot be changed</p>
+              <p className="mt-1 text-xs text-gray-500">
+                {signsInByPhone ? 'Phone number cannot be changed' : 'Email cannot be changed'}
+              </p>
             </div>
 
             <div>

@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import MobileMenu from './MobileMenu';
 import { createClient } from '@/lib/supabase/client';
+import { signedInLabel } from '@/lib/auth/display-contact';
+import { clearCart } from '@/lib/cart/storage';
 
 type UserControlsProps = {
   isDevMode: boolean;
@@ -19,6 +21,7 @@ export default function UserControls({ isDevMode }: UserControlsProps) {
 
   const [loaded, setLoaded] = useState(false);
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
@@ -39,6 +42,7 @@ export default function UserControls({ isDevMode }: UserControlsProps) {
 
       if (cancelled) return;
       setEmail(user?.email || '');
+      setPhone((user?.user_metadata?.phone_e164 as string | undefined) ?? null);
 
       if (!user) {
         // Should be rare because middleware protects app routes, but keep UI safe.
@@ -66,7 +70,7 @@ export default function UserControls({ isDevMode }: UserControlsProps) {
     };
   }, [isDevMode, supabase]);
 
-  const userEmail = isDevMode ? 'demo@cbmplastics.com' : email;
+  const userEmail = isDevMode ? 'demo@cbmplastics.com' : signedInLabel(email, phone);
 
   return (
     <>
@@ -100,7 +104,7 @@ export default function UserControls({ isDevMode }: UserControlsProps) {
                 Admin
               </Link>
             )}
-            <form action="/logout" method="POST">
+            <form action="/logout" method="POST" onSubmit={() => clearCart()}>
               <button
                 type="submit"
                 className="text-sm font-medium text-gray-700 hover:text-gray-900 px-3 py-1.5 rounded-md hover:bg-gray-100 transition-colors"

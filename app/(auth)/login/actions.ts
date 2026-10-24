@@ -58,7 +58,15 @@ export async function signInWithPhonePassword(input: {
   });
 
   if (signError) {
-    return { ok: false, error: signInErrorMessage(signError) };
+    // Auth's own "Invalid login credentials" would tell a known number from an unknown one,
+    // which gets "Invalid phone number or password." above
+    return {
+      ok: false,
+      error:
+        signError.code === 'invalid_credentials'
+          ? 'Invalid phone number or password.'
+          : signInErrorMessage(signError),
+    };
   }
 
   return { ok: true };

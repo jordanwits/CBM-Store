@@ -27,6 +27,9 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith('/checkout') ||
     pathname.startsWith('/orders') ||
     pathname.startsWith('/points-history') ||
+    // Was missing, so the profile page skipped the session refresh and the
+    // must-change-password gate that every other signed-in page goes through
+    pathname.startsWith('/profile') ||
     pathname.startsWith('/admin');
 
   const isAuthRoute =

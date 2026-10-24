@@ -4,6 +4,8 @@ import { usePathname } from 'next/navigation';
 import { useState, useEffect, useMemo } from 'react';
 import { BrandMark } from 'core/components/BrandMark';
 import { createClient } from '@/lib/supabase/client';
+import { signedInLabel } from '@/lib/auth/display-contact';
+import { clearCart } from '@/lib/cart/storage';
 
 interface AdminLayoutClientProps {
   children: React.ReactNode;
@@ -16,6 +18,7 @@ export function AdminLayoutClient({ children, isDevMode }: AdminLayoutClientProp
   const supabase = useMemo(() => createClient(), []);
   const [loaded, setLoaded] = useState(false);
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -34,6 +37,7 @@ export function AdminLayoutClient({ children, isDevMode }: AdminLayoutClientProp
 
       if (cancelled) return;
       setEmail(user?.email || '');
+      setPhone((user?.user_metadata?.phone_e164 as string | undefined) ?? null);
       setLoaded(true);
     }
 
@@ -44,7 +48,7 @@ export function AdminLayoutClient({ children, isDevMode }: AdminLayoutClientProp
     };
   }, [supabase, isDevMode]);
 
-  const userEmail = isDevMode ? 'demo@cbmplastics.com' : email;
+  const userEmail = isDevMode ? 'demo@cbmplastics.com' : signedInLabel(email, phone);
 
   const navigation = [
     { 
@@ -144,7 +148,7 @@ export function AdminLayoutClient({ children, isDevMode }: AdminLayoutClientProp
               ) : (
                 <>
                   <span className="text-sm text-gray-600 truncate max-w-[150px] hidden sm:inline">{userEmail}</span>
-                  <form action="/logout" method="POST">
+                  <form action="/logout" method="POST" onSubmit={() => clearCart()}>
                     <button
                       type="submit"
                       className="text-sm font-medium text-gray-700 hover:text-gray-900 px-3 py-1.5 rounded-md hover:bg-gray-100 transition-colors"

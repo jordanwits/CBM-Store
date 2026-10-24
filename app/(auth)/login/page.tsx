@@ -12,6 +12,7 @@ import { PhoneInput } from 'core/components/PhoneInput';
 import { isCompleteNanpDigits } from 'core/lib/phone-format';
 import { Card, CardHeader, CardContent } from 'core/components/Card';
 import { BrandMark } from 'core/components/BrandMark';
+import { clearCart } from '@/lib/cart/storage';
 
 type LoginMethod = 'email' | 'phone';
 
@@ -44,6 +45,9 @@ export default function LoginPage() {
         if (!result.ok) {
           setError(result.error);
         } else {
+          // A cart left in this browser belongs to whoever used it last, who may not be
+          // this person (a shared machine, or a session that simply expired)
+          clearCart();
           router.push(destination);
           router.refresh();
         }
@@ -55,6 +59,7 @@ export default function LoginPage() {
         if (signError) {
           setError(signInErrorMessage(signError));
         } else {
+          clearCart();
           router.push(destination);
           router.refresh();
         }

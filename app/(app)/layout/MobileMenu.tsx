@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { clearCart } from '@/lib/cart/storage';
 
 interface MobileMenuProps {
   userEmail: string;
@@ -82,7 +83,7 @@ export default function MobileMenu({ userEmail, isAdmin, isDevMode }: MobileMenu
                     Login
                   </Link>
                 ) : (
-                  <form action="/logout" method="POST">
+                  <form action="/logout" method="POST" onSubmit={() => clearCart()}>
                     <button
                       type="submit"
                       className="w-full text-left px-3 py-2 rounded-md text-base font-medium text-red-600 hover:bg-red-50"

@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { MUST_CHANGE_PASSWORD_META_KEY } from '@/lib/auth/must-change-password';
+import { changePassword } from './actions';
 import { Button } from 'core/components/Button';
 import { Input } from 'core/components/Input';
 import { Card, CardContent } from 'core/components/Card';
@@ -33,7 +33,13 @@ function UpdatePasswordContent() {
       const accessToken = hashParams.get('access_token');
       const refreshToken = hashParams.get('refresh_token');
       const tokenType = hashParams.get('type');
-      
+
+      // The link's tokens come off the address bar (and out of history) as soon as they are
+      // read, whether or not they work; they used to stay there whenever a link failed
+      if (hash) {
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      }
+
       const hasToken = accessToken && (tokenType === 'invite' || tokenType === 'recovery');
       
       if (hasToken && accessToken && refreshToken) {
@@ -55,9 +61,6 @@ function UpdatePasswordContent() {
           if (data.session) {
             setIsValidSession(true);
             setSessionReady(true);
-            
-            // Clear the hash from URL for security
-            window.history.replaceState(null, '', window.location.pathname);
           }
         } catch (err) {
           console.error('Error setting session:', err);
@@ -125,14 +128,13 @@ function UpdatePasswordContent() {
 
     try {
       const supabase = createClient();
-      
-      const { error: updateError } = await supabase.auth.updateUser({
-        password,
-        data: { [MUST_CHANGE_PASSWORD_META_KEY]: false },
-      });
 
-      if (updateError) {
-        setError(updateError.message);
+      // Done on the server, which is the only place that can lift the must-change-password
+      // flag, and only once the new password is in place
+      const result = await changePassword(password);
+
+      if (!result.success) {
+        setError(result.error || 'Failed to update password');
         setLoading(false);
         return;
       }

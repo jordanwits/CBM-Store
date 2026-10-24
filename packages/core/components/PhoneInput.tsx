@@ -1,11 +1,7 @@
 'use client';
 
 import React, { forwardRef } from 'react';
-import {
-  formatPhoneFieldDisplay,
-  stripPhoneDigits,
-  PHONE_INPUT_MAX_DIGITS,
-} from '../lib/phone-format';
+import { formatPhoneFieldDisplay, limitPhoneDigits } from '../lib/phone-format';
 
 export interface PhoneInputProps
   extends Omit<
@@ -28,7 +24,7 @@ export const PhoneInput = forwardRef<HTMLInputElement, PhoneInputProps>(function
   const display = formatPhoneFieldDisplay(digits);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const next = stripPhoneDigits(e.target.value).slice(0, PHONE_INPUT_MAX_DIGITS);
+    const next = limitPhoneDigits(e.target.value);
     onDigitsChange(next);
   };
 

@@ -17,6 +17,7 @@ export default async function ProfilePage() {
     profile = {
       id: 'mock-user-id',
       email: 'demo@cbmplastics.com',
+      phone: null,
       full_name: 'Demo User',
       role: 'user' as const,
       active: true,
