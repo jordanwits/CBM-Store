@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useTransition, useState, useEffect } from 'react';
+import { useTransition, useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 
 interface FilterPanelProps {
@@ -52,25 +52,31 @@ export function FilterPanel({
     });
   }, [params.category, params.collections.join(','), params.size.join(','), params.color.join(',')]);
 
+  // The filters as last clicked. The URL's params only catch up when navigation finishes, so
+  // building the next URL from them dropped a choice made while the previous one loaded.
+  const pendingRef = useRef(optimisticState);
+  pendingRef.current = optimisticState;
+
   const buildFilterUrl = (updates: any) => {
+    const current = pendingRef.current;
     const newParams = new URLSearchParams();
     
     // Preserve existing params
     if (params.q && !('q' in updates)) newParams.set('q', params.q);
-    if (params.category && !('category' in updates)) newParams.set('category', params.category);
+    if (current.category && !('category' in updates)) newParams.set('category', current.category);
     if (params.minUsd && !('minUsd' in updates)) newParams.set('minUsd', params.minUsd);
     if (params.maxUsd && !('maxUsd' in updates)) newParams.set('maxUsd', params.maxUsd);
     if (params.sort && !('sort' in updates)) newParams.set('sort', params.sort);
     
     // Handle array params
-    if (params.collections.length > 0 && !('collections' in updates)) {
-      params.collections.forEach(c => newParams.append('collections', c));
+    if (current.collections.length > 0 && !('collections' in updates)) {
+      current.collections.forEach(c => newParams.append('collections', c));
     }
-    if (params.size.length > 0 && !('size' in updates)) {
-      params.size.forEach(s => newParams.append('size', s));
+    if (current.size.length > 0 && !('size' in updates)) {
+      current.size.forEach(s => newParams.append('size', s));
     }
-    if (params.color.length > 0 && !('color' in updates)) {
-      params.color.forEach(c => newParams.append('color', c));
+    if (current.color.length > 0 && !('color' in updates)) {
+      current.color.forEach(c => newParams.append('color', c));
     }
     
     // Apply updates
@@ -95,6 +101,8 @@ export function FilterPanel({
       ...optimisticUpdate,
     }));
     
+    pendingRef.current = { ...pendingRef.current, ...optimisticUpdate };
+
     // Then trigger the actual navigation
     const url = buildFilterUrl(updates);
     startTransition(() => {

@@ -16,6 +16,7 @@ import {
 } from '@/lib/cache/store-data';
 import { availabilityPillClasses, productAvailability } from '@/lib/inventory/availability';
 import { parsePointsBalancesRpc } from '@/lib/points/buckets';
+import { fetchAllRows } from '@/lib/supabase/fetch-all';
 
 // Enable aggressive caching: Revalidate this page every 5 minutes
 // This means the page will be statically generated and served from cache
@@ -291,9 +292,15 @@ export default async function DashboardPage({
       query = query.lte('base_usd', parseFloat(params.maxUsd));
     }
 
-    // Apply text search
-    if (params.q) {
-      query = query.or(`name.ilike.%${params.q}%,description.ilike.%${params.q}%`);
+    // Apply text search. Characters that mean something to PostgREST's or() filter (a comma
+    // or parenthesis ended the expression, the query failed, and the page said "No products
+    // found") or are wildcards to ilike are searched for as spaces.
+    const searchText =
+      typeof params.q === 'string'
+        ? params.q.replace(/[,()"\\%_*]/g, ' ').replace(/\s+/g, ' ').trim()
+        : '';
+    if (searchText) {
+      query = query.or(`name.ilike.%${searchText}%,description.ilike.%${searchText}%`);
     }
 
     // Apply sorting
@@ -322,38 +329,17 @@ export default async function DashboardPage({
 
     // Apply size/color filters via variants - filters stack (AND logic across types)
     if ((params.size || params.color) && filteredProducts.length > 0) {
-      // Run size and color queries in parallel for better performance
-      const [sizeResult, colorResult] = await Promise.all([
-        params.size
-          ? supabase
-              .from('product_variants')
-              .select('product_id')
-              .eq('active', true)
-              .in('size', Array.isArray(params.size) ? params.size : [params.size])
-          : Promise.resolve({ data: null }),
-        params.color
-          ? supabase
-              .from('product_variants')
-              .select('product_id')
-              .eq('active', true)
-              .in('color', Array.isArray(params.color) ? params.color : [params.color])
-          : Promise.resolve({ data: null }),
-      ]);
-
-      let productIds = new Set(filteredProducts.map(p => p.id));
-
-      // Apply size filter (keep products that have ANY of the selected sizes)
-      if (sizeResult.data) {
-        const sizeProductIds = new Set(sizeResult.data.map(v => v.product_id));
-        productIds = new Set([...productIds].filter(id => sizeProductIds.has(id)));
-      }
-
-      // Apply color filter (keep products that have ANY of the selected colors)
-      // This stacks with size filter using AND logic
-      if (colorResult.data) {
-        const colorProductIds = new Set(colorResult.data.map(v => v.product_id));
-        productIds = new Set([...productIds].filter(id => colorProductIds.has(id)));
-      }
+      // One variant has to carry the size and the colour. Looked up separately, "XL + Blue"
+      // matched a shirt made only in XL Black and S Blue.
+      const sizes = params.size ? (Array.isArray(params.size) ? params.size : [params.size]) : null;
+      const colors = params.color ? (Array.isArray(params.color) ? params.color : [params.color]) : null;
+      const { data: matchingVariants } = await fetchAllRows<{ product_id: string }>((from, to) => {
+        let variantQuery = supabase.from('product_variants').select('product_id').eq('active', true);
+        if (sizes) variantQuery = variantQuery.in('size', sizes);
+        if (colors) variantQuery = variantQuery.in('color', colors);
+        return variantQuery.order('id').range(from, to);
+      });
+      const productIds = new Set(matchingVariants.map((v) => v.product_id));
 
       // Filter products to only those matching all variant criteria
       filteredProducts = filteredProducts.filter(p => productIds.has(p.id));

@@ -44,6 +44,20 @@ export function FilterDrawer({
   }, [isOpen]);
 
   // Prevent body scroll when drawer is open
+  // The drawer is hidden by CSS from the lg breakpoint up, but it stayed open in state, and so
+  // did the scroll lock: widening the window (an iPad turned to landscape) left a page that
+  // would not scroll, with no visible way to close it. Crossing into lg now closes it.
+  useEffect(() => {
+    if (!isOpen) return;
+    const wide = window.matchMedia('(min-width: 1024px)');
+    const closeIfWide = () => {
+      if (wide.matches) setIsOpen(false);
+    };
+    closeIfWide();
+    wide.addEventListener('change', closeIfWide);
+    return () => wide.removeEventListener('change', closeIfWide);
+  }, [isOpen]);
+
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';

@@ -31,6 +31,8 @@ export default function ProductPageClient({
   conversionRate,
 }: ProductPageClientProps) {
   const [selectedColor, setSelectedColor] = useState<string | undefined>();
+  // One unit as chosen, reported by AddToCartButton once a variant is picked
+  const [unitPoints, setUnitPoints] = useState(basePoints);
 
   // Before a variant is picked, the honest claim is about the product as a whole. Picking
   // one narrows it, and AddToCartButton takes over from there.
@@ -52,7 +54,7 @@ export default function ProductPageClient({
           <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-3">{product.name}</h1>
           
           <div className="flex items-baseline gap-3 mb-4">
-            <p className="text-4xl font-bold text-secondary">{basePoints.toLocaleString()}</p>
+            <p className="text-4xl font-bold text-secondary">{unitPoints.toLocaleString()}</p>
             <span className="text-lg text-gray-600">points</span>
           </div>
 
@@ -86,6 +88,7 @@ export default function ProductPageClient({
           conversionRate={conversionRate}
           madeToOrder={product.made_to_order ?? false}
           onColorChange={setSelectedColor}
+          onPointsChange={setUnitPoints}
         />
       </div>
     </div>

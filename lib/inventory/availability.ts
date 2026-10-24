@@ -253,6 +253,24 @@ export function productAvailability(
   madeToOrder: boolean
 ): Availability {
   if (madeToOrder) {
+    // Made-to-order products sell from stock first (migration 037), so units on the shelf
+    // are ready now. The badge used to say "made to order" even with plenty on hand, while
+    // picking a stocked variant on the same page said "In stock".
+    const onHand = (variants || [])
+      .filter((v) => v.active !== false)
+      .reduce((sum, v) => sum + Math.max(0, v.inventory_count ?? 0), 0);
+    if (onHand > 0) {
+      return {
+        state: 'in_stock',
+        unitsOnHand: onHand,
+        label: 'In stock',
+        detail: 'Some are ready to collect now; anything beyond that is made to order.',
+        tone: 'positive',
+        sufficient: true,
+        unitsToMake: 0,
+      };
+    }
+
     return {
       state: 'made_to_order',
       unitsOnHand: null,

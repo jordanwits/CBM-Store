@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from 'core/components/Button';
 import { Card, CardContent } from 'core/components/Card';
 import { Alert } from 'core/components/Alert';
@@ -46,6 +46,8 @@ interface AddToCartButtonProps {
   conversionRate: number;
   madeToOrder?: boolean;
   onColorChange?: (color: string | undefined) => void;
+  /** The points one unit costs as chosen, the variant's adjustment included */
+  onPointsChange?: (points: number) => void;
 }
 
 export default function AddToCartButton({
@@ -56,6 +58,7 @@ export default function AddToCartButton({
   conversionRate,
   madeToOrder = false,
   onColorChange,
+  onPointsChange,
 }: AddToCartButtonProps) {
   const [selectedColor, setSelectedColor] = useState<string | undefined>();
   const [selectedSize, setSelectedSize] = useState<string | undefined>();
@@ -225,6 +228,12 @@ export default function AddToCartButton({
     ? Math.round(selectedVariant.price_adjustment_usd * conversionRate) 
     : 0;
   const finalPoints = basePoints + variantAdjustment;
+
+  // The page's headline price showed the base price whatever was picked, while the subtotal
+  // and checkout charged the adjustment too
+  useEffect(() => {
+    onPointsChange?.(finalPoints);
+  }, [finalPoints, onPointsChange]);
   
   // Get availability message
   const getAvailabilityMessage = () => {

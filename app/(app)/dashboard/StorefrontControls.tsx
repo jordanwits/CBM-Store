@@ -56,6 +56,9 @@ export function StorefrontControls({ currentSort = 'featured' }: StorefrontContr
           <input
             type="text"
             name="q"
+            // Keyed on the search, so clearing it (or removing its chip) empties the box; with
+            // defaultValue alone the old text stayed and Enter searched for it again
+            key={searchParams.get('q') || ''}
             defaultValue={searchParams.get('q') || ''}
             placeholder="Search"
             className="w-full pl-12 pr-4 py-3 bg-gray-100 border-0 rounded-full hover:bg-gray-200 focus:bg-white focus:ring-2 focus:ring-gray-300 text-gray-900 placeholder:text-gray-500 transition-colors"
