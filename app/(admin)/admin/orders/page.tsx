@@ -18,8 +18,8 @@ interface AdminOrdersPageProps {
 
 export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageProps) {
   const params = await searchParams;
-  const currentPage = parseInt(params.page || '1', 10);
-  const daysFilter = parseInt(params.days || '9999', 10); // Default all time, paginated
+  const currentPage = Math.max(1, parseInt(params.page || '1', 10) || 1);
+  const daysFilter = Math.max(1, parseInt(params.days || '9999', 10) || 9999); // Default all time, paginated
 
   // Check if using placeholder Supabase (dev mode)
   const isDevMode = !process.env.NEXT_PUBLIC_SUPABASE_URL ||

@@ -23,8 +23,8 @@ interface OrdersPageProps {
 
 export default async function OrdersPage({ searchParams }: OrdersPageProps) {
   const params = await searchParams;
-  const daysFilter = parseInt(params.days || '90', 10); // Default to last 90 days
-  const currentPage = parseInt(params.page || '1', 10);
+  const daysFilter = Math.max(1, parseInt(params.days || '90', 10) || 90); // Default to last 90 days
+  const currentPage = Math.max(1, parseInt(params.page || '1', 10) || 1);
   const itemsPerPage = 20;
   
   // Check if using placeholder Supabase (dev mode)

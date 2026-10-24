@@ -21,7 +21,11 @@ import {
   summarizeFulfillment,
   unitsToMake,
 } from '@/lib/orders/fulfillment';
-import { orderItemRefundedPoints } from '@/lib/orders/refunds';
+import {
+  orderItemRefundedPoints,
+  summarizeOrderRefunds,
+  type LedgerRefundRow,
+} from '@/lib/orders/refunds';
 import { resolveVariantImage } from '@/lib/products/variant-image';
 
 export default async function OrderDetailPage({
@@ -37,6 +41,7 @@ export default async function OrderDetailPage({
   
   let order: any = null;
   let items: any[] = [];
+  let ledgerRefunds: LedgerRefundRow[] = [];
   
   if (isDevMode) {
     // Mock data for dev mode
@@ -95,8 +100,8 @@ export default async function OrderDetailPage({
 
     if (!userId) return null;
 
-    // Run both queries in parallel for faster loading
-    const [orderResult, itemsResult] = await Promise.all([
+    // Run the queries in parallel for faster loading
+    const [orderResult, itemsResult, ledgerResult] = await Promise.all([
       supabase
         .from('orders')
         .select(
@@ -111,6 +116,13 @@ export default async function OrderDetailPage({
           'id, order_id, product_id, variant_id, product_name, variant_name, variant_size, variant_color, quantity, units_from_stock, made_to_order, points_per_item, total_points, fulfillment_status, refunded_restricted_points, refunded_universal_points, products(images), product_variants(color, image_url)'
         )
         .eq('order_id', id),
+      // Every refund, line or whole order, is a positive ledger row against the order.
+      // A whole-order refund before 045 marked no lines, so the lines alone missed it.
+      supabase
+        .from('points_ledger')
+        .select('delta_points, point_type')
+        .eq('order_id', id)
+        .gt('delta_points', 0),
     ]);
 
     if (!orderResult.data) {
@@ -123,6 +135,7 @@ export default async function OrderDetailPage({
     }
 
     order = orderResult.data;
+    ledgerRefunds = ledgerResult.data ?? [];
     const rawItems = itemsResult.data || [];
 
     // Colour siblings for the image fallback: a variant added one at a time often carries no
@@ -165,10 +178,9 @@ export default async function OrderDetailPage({
 
   const fulfillment = summarizeFulfillment(items);
   const showFulfillmentDetail = order.status !== 'cancelled' && fulfillment.isPartiallyFulfilled;
-  // Lines refunded on their own (or as part of a whole-order refund since 041)
-  const refundedPoints = items
-    .filter((item: any) => isItemRefunded(item.fulfillment_status))
-    .reduce((sum: number, item: any) => sum + orderItemRefundedPoints(item), 0);
+  // Refunds of every kind, from the ledger. Refunded lines are no longer counted as items.
+  const refundedPoints = summarizeOrderRefunds(order, ledgerRefunds).refunded;
+  const activeItems = items.filter((item: any) => !isItemRefunded(item.fulfillment_status));
 
   return (
     <div>
@@ -253,10 +265,10 @@ export default async function OrderDetailPage({
               <div>
                 <p className="text-sm font-medium text-gray-500 mb-2">Total Items</p>
                 <p className="text-4xl font-bold text-gray-900">
-                  {items.reduce((sum, item) => sum + item.quantity, 0)}
+                  {activeItems.reduce((sum, item) => sum + item.quantity, 0)}
                 </p>
                 <p className="text-sm text-gray-600 mt-1">
-                  {items.length} {items.length === 1 ? 'product' : 'products'}
+                  {activeItems.length} {activeItems.length === 1 ? 'product' : 'products'}
                 </p>
               </div>
             </div>
@@ -321,7 +333,7 @@ export default async function OrderDetailPage({
             </svg>
             Order Items
             <Badge variant="default" className="ml-2">
-              {items.reduce((sum, item) => sum + item.quantity, 0)} items
+              {activeItems.reduce((sum, item) => sum + item.quantity, 0)} items
             </Badge>
           </h2>
         </CardHeader>
@@ -440,7 +452,7 @@ export default async function OrderDetailPage({
                   <div>
                     <p className="text-lg font-semibold text-gray-900">Order Total</p>
                     <p className="text-sm text-gray-500">
-                      {items.reduce((sum, item) => sum + item.quantity, 0)} total items
+                      {activeItems.reduce((sum, item) => sum + item.quantity, 0)} total items
                     </p>
                   </div>
                   <div className="text-right">

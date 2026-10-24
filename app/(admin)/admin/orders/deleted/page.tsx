@@ -3,6 +3,7 @@ import { Card, CardHeader, CardContent } from 'core/components/Card';
 import { BackButton } from 'core/components/BackButton';
 import { FormattedDate } from 'core/components/FormattedDate';
 import { orderStatusLabel } from '@/lib/orders/status';
+import { isItemRefunded } from '@/lib/orders/fulfillment';
 import { RestoreOrderButton } from './RestoreOrderButton';
 
 // Old enough deletions stop mattering long before this; it only keeps the page bounded
@@ -73,7 +74,7 @@ export default async function DeletedOrdersPage() {
 
     rows = entries.map((entry: any) => {
       const order = entry.order_data ?? {};
-      const items: Array<{ quantity?: number }> = Array.isArray(entry.items_data)
+      const items: Array<{ quantity?: number; fulfillment_status?: string | null }> = Array.isArray(entry.items_data)
         ? entry.items_data
         : [];
 
@@ -88,7 +89,10 @@ export default async function DeletedOrdersPage() {
           : 'N/A',
         // A delete run outside the app (SQL editor, a cascade) has no admin to name
         deletedBy: entry.deleted_by ? contactLabel(profilesById.get(entry.deleted_by)) : '—',
-        units: items.reduce((sum, item) => sum + (item.quantity ?? 0), 0),
+        // Refunded lines were handed back, not sold
+        units: items
+          .filter((item) => !isItemRefunded(item.fulfillment_status ?? ''))
+          .reduce((sum, item) => sum + (item.quantity ?? 0), 0),
         note: order.customer_note?.trim() || order.notes?.trim() || null,
       };
     });

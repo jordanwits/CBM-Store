@@ -19,6 +19,7 @@ import {
   variantAvailability,
   OPTION_REQUIRED,
   VARIANT_UNAVAILABLE,
+  PRODUCT_UNAVAILABLE,
 } from '@/lib/inventory/availability';
 import { resolveVariantImage } from '@/lib/products/variant-image';
 
@@ -138,10 +139,11 @@ export default function CartPageClient({ isDevMode }: CartPageClientProps) {
       if (!product) {
         return {
           ...item,
-          productName: 'Unknown Product',
+          productName: 'Item no longer available',
           pointsPerItem: 0,
           totalPoints: 0,
           cbmCollectionEligible: false,
+          availability: PRODUCT_UNAVAILABLE,
         };
       }
 

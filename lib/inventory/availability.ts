@@ -109,6 +109,21 @@ export const VARIANT_UNAVAILABLE: Availability = {
 };
 
 /**
+ * A cart line for a product the storefront no longer lists, because it was switched off or
+ * deleted after being added. It used to show as "Unknown Product" at 0 points, which read
+ * as free, while place_points_order rejects it.
+ */
+export const PRODUCT_UNAVAILABLE: Availability = {
+  state: 'out_of_stock',
+  unitsOnHand: null,
+  label: 'No longer available',
+  detail: 'This item is no longer offered. Remove it from your cart to continue.',
+  tone: 'negative',
+  sufficient: false,
+  unitsToMake: 0,
+};
+
+/**
  * A cart line with no variant for a product that now has variants, because it was added
  * before the product had sizes or colors. place_points_order refuses it: it would take no
  * stock and leave staff with no size to hand over.
